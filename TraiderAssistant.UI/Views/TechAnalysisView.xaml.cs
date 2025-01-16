@@ -13,33 +13,73 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using TraiderAssistant.Infrastructure.Services;
 using TraiderAssistant.UI.Converters;
 using TraiderAssistant.UI.ViewModels;
 
 namespace TraiderAssistant.UI.Views
 {
-    /// <summary>
-    /// Interaction logic for TechAnalysisView.xaml
-    /// </summary>
+
     public partial class TechAnalysisView : UserControl
     {
         private TechAnalysisViewModel viewModel;
+        private Line arrow;
+
+        public static readonly DependencyProperty TechnicalAnalysisResultProperty =
+            DependencyProperty.Register("TechnicalAnalysisResult", typeof(TechnicalAnalysisResult), typeof(TechAnalysisView), new PropertyMetadata(null, OnTechnicalAnalysisResultChanged));
+
+        public TechnicalAnalysisResult TechnicalAnalysisResult
+        {
+            get { return (TechnicalAnalysisResult)GetValue(TechnicalAnalysisResultProperty); }
+            set { SetValue(TechnicalAnalysisResultProperty, value); }
+        }
+
         public TechAnalysisView()
         {
-            InitializeComponent();
             viewModel = new TechAnalysisViewModel();
-            viewModel.PropertyChanged += ViewModel_PropertyChanged;
-            DataContext = viewModel;
-            //DataContext = new TechAnalysisViewModel();
+            InitializeComponent();
+        }
 
-            // Создаем Canvas
-            var canvas = new Canvas
+        private static void OnTechnicalAnalysisResultChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var view = d as TechAnalysisView;
+            view?.UpdateCanvas();
+        }
+
+        private void UpdateCanvas()
+        {
+            var canvas = AnalysisCanvas;
+            if (TechnicalAnalysisResult != null)
             {
-                Width = 300,
-                Height = 300
-            };
-            this.Content = canvas;
+                canvas.Children.Clear();
 
+                DrawSectors(canvas);
+                DrawArrow(canvas);
+
+
+                //// Пример изменения размера круга в зависимости от значения индикатора
+                //double radius = 50 + TechnicalAnalysisResult.Indicator * 10;
+                //double centerX = AnalysisCanvas.Width / 2;
+                //double centerY = AnalysisCanvas.Height / 2;
+
+                //var circle = new Ellipse
+                //{
+                //    Width = radius * 2,
+                //    Height = radius * 2,
+                //    Fill = Brushes.Red
+                //};
+
+                //Canvas.SetLeft(circle, centerX - radius);
+                //Canvas.SetTop(circle, centerY - radius);
+
+                //AnalysisCanvas.Children.Add(circle);
+
+                //// Добавьте здесь дополнительную логику для создания более сложных фигур
+            }
+        }
+
+        private void DrawSectors(Canvas canvas)
+        {
             // Центр круга
             double centerX = 100;
             double centerY = 100;
@@ -57,52 +97,10 @@ namespace TraiderAssistant.UI.Views
                 // Создаем сектор
                 var path = CreateOuterArc(centerX, centerY, outerRadius, innerRadius, currentAngle, currentAngle + sectorAngles[i]);
                 path.Fill = sectorColors[i];
-                //canvas.Children.Add(path);
+                canvas.Children.Add(path);
                 // Смещаем текущий угол для следующего сектора
                 currentAngle += sectorAngles[i];
             }
-
-            var arrow = CreateArrow();
-            //canvas.Children.Add(arrow);
-
-            ((TechAnalysisViewModel)DataContext).PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(TechAnalysisViewModel.IndicatorValue))
-                {
-                    MessageBox.Show($"TechAnalysisView. IndicatorValue:{((TechAnalysisViewModel)s).IndicatorValue}");
-                    // Обновление представления
-                    arrow.X2 = 100 + 50 * Math.Cos(((TechAnalysisViewModel)s).IndicatorValue * Math.PI / 180);
-                    arrow.Y2 = 100 - 50 * Math.Sin(((TechAnalysisViewModel)s).IndicatorValue * Math.PI / 180);
-                    arrow.InvalidateVisual();
-                }
-            };
-        }
-
-        private Line CreateArrow()
-        {
-            var arrow = new Line
-            {
-                X1 = 100,
-                Y1 = 100,
-                X2 = 35,
-                Y2 = 100,
-                Stroke = Brushes.Red,
-                StrokeThickness = 2
-            };
-
-            var binding = new Binding("IndicatorValue")
-            {
-                Source = DataContext,
-                Converter = new IndicatorValueToAngleConverter()
-            };
-
-            var rotateTransform = new RotateTransform();
-            arrow.RenderTransform = rotateTransform;
-            arrow.RenderTransformOrigin = new Point(1, 1);//(0.5, 0.5)
-
-            BindingOperations.SetBinding(rotateTransform, RotateTransform.AngleProperty, binding);
-
-            return arrow;
         }
 
         private Path CreateOuterArc(double centerX, double centerY, double outerRadius, double innerRadius, double startAngle, double endAngle)
@@ -170,13 +168,53 @@ namespace TraiderAssistant.UI.Views
 
             return path;
         }
-        private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
+
+        private void DrawArrow(Canvas canvas)
         {
-            if (e.PropertyName == nameof(TechAnalysisViewModel.IndicatorValue))
+            double centerX = 100;
+            double centerY = 100;
+            double radius = 90;
+            // Обновляем угол поворота стрелки в зависимости от значения индикатора
+            double angle = IndicatorToAngle(TechnicalAnalysisResult.Indicator);
+            double angleRadian = DegreesToRadians(angle);
+
+            double pointX = radius * Math.Sin(angleRadian);
+            pointX = centerX + pointX;
+
+            double pointY = radius * Math.Cos(angleRadian);
+            pointY = centerY - pointY;
+
+            arrow = new Line
             {
-                // Выполнить действия при изменении SelectedChartType
-                MessageBox.Show($"IndicatorValue изменено на: {viewModel.IndicatorValue}");
-            }
+                X1 = centerX,
+                Y1 = centerY,
+                //X2 = canvas.Width/2,
+                //Y2 = 0,
+                X2 = pointX,
+                Y2 = pointY,
+                Stroke = Brushes.Black,
+                StrokeThickness = 2
+            };
+
+
+            canvas.Children.Add(arrow);
+        }
+
+        double DegreesToRadians(double degrees)
+        {
+            return degrees * Math.PI / 180.0;
+        }
+
+        /// <summary>
+        /// Преобразует значение индикатора в угол поворота стрелки.
+        /// Значение индикатора варьируется от -100 до 100.
+        /// Значение -100 соответствует углу -90°, 0 - 0°, 100 соответствует углу 90°.
+        /// </summary>
+        /// <returns></returns>
+        double IndicatorToAngle(double indicator)
+        {
+            double angle = 90 / 100.0 * indicator;
+            return angle;
         }
     }
 }

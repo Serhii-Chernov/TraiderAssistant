@@ -10,9 +10,10 @@ namespace TraiderAssistant.UI.Views
     {
         public BitcoinChartView()
         {
-            InitializeComponent();
             var techAnalysisViewModel = new TechAnalysisViewModel();
             DataContext = new BitcoinChartViewModel(techAnalysisViewModel);
+
+            InitializeComponent();
         }
 
         

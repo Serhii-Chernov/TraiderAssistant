@@ -28,6 +28,7 @@ namespace TraiderAssistant.UI.ViewModels
         public ICommand LoadWeekDataCommand { get; }
         public ICommand LoadMonthDataCommand { get; }
         public ICommand LoadYearDataCommand { get; }
+        public ICommand AnalyzeCommand { get; }
         //public ICommand LoadTechnicalAnalysisCommand { get; }
 
         public readonly List<string> ChartTypes = new List<string> { "Line", "Area", "Candle" };
@@ -53,6 +54,7 @@ namespace TraiderAssistant.UI.ViewModels
             LoadWeekDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow));
             LoadMonthDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddMonths(-1), DateTime.UtcNow));
             LoadYearDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddYears(-1), DateTime.UtcNow));
+            AnalyzeCommand = new RelayCommand(Analyze);
             //LoadTechnicalAnalysisCommand = new RelayCommand(OpenTechnicalAnalysisWindow);
 
             SelectedChartType = "Line"; // Установите начальный стиль графика
@@ -140,10 +142,38 @@ namespace TraiderAssistant.UI.ViewModels
             return new LinearGradientBrush(gradientStops, 0);
         }
 
+
         public event PropertyChangedEventHandler PropertyChanged;
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+
+        /// <summary>
+        /// Удалить после того как будет реализована логика анализа данных.
+        /// </summary>
+        public double IndicatorValue
+        {
+            get;
+            set;
+        }
+
+        private TechnicalAnalysisResult _technicalAnalysisResult;
+        public TechnicalAnalysisResult TechnicalAnalysisResult
+        {
+            get { return _technicalAnalysisResult; }
+            set
+            {
+                _technicalAnalysisResult = value;
+                OnPropertyChanged(nameof(TechnicalAnalysisResult));
+            }
+        }
+
+        private void Analyze()
+        {
+            // Логика анализа данных
+            TechnicalAnalysisResult = new TechnicalAnalysisResult(IndicatorValue);
         }
     }
 }

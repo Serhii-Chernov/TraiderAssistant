@@ -10,7 +10,13 @@
     <!--<UserControl.Resources>
         <converters:IndicatorValueToAngleConverter x:Key="IndicatorValueToAngleConverter"/>
     </UserControl.Resources>-->
-    <Button Content="{Binding IndicatorValue}" VerticalAlignment="Top" />
+    <StackPanel>
+        <Button Content="ddddd"  />
+        <TextBox Text="{Binding TechnicalAnalysisResult.Indicator}"  />
+        <Border BorderBrush="Black" BorderThickness="1" CornerRadius="5">
+            <Canvas x:Name="AnalysisCanvas" Width="300" Height="150" Background="White"/>
+        </Border>
+    </StackPanel>
 
 
 </UserControl>

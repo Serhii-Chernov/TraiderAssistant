@@ -5,10 +5,12 @@
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
       xmlns:lvc="clr-namespace:LiveCharts.Wpf;assembly=LiveCharts.Wpf"
       xmlns:local="clr-namespace:TraiderAssistant.UI.Views"
+      xmlns:viewModels="clr-namespace:TraiderAssistant.UI.ViewModels"
       mc:Ignorable="d" 
       d:DesignHeight="500" d:DesignWidth="800"
       Title="BitcoinChartView"
-      DataContext="{Binding BitcoinChartViewModel}">
+      d:DataContext="{d:DesignInstance viewModels:BitcoinChartViewModel}"
+      >
 
     <Grid>
         <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}" HorizontalAlignment="Left" Width="70" VerticalAlignment="Top"  Margin="10,10,0,0"/>
@@ -16,6 +18,8 @@
         <Button Content="1 week" Command="{Binding LoadWeekDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="150,10,0,0"/>
         <Button Content="1 month" Command="{Binding LoadMonthDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="200,10,0,0"/>
         <Button Content="1 year" Command="{Binding LoadYearDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="260,10,0,0"/>
+        <Button Content="Analyze" Command="{Binding AnalyzeCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="320,10,0,0"/>
+        <TextBox Text="{Binding IndicatorValue, Mode=TwoWay}" HorizontalAlignment="Left" VerticalAlignment="Top" Width="40" Margin="390,10,0,0"/>
         <!--<Button Content="Technical Analysis" Command="{Binding LoadTechnicalAnalysisCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="320,10,0,0"/>-->
 
         <!-- Разметка для отображения данных -->
@@ -37,7 +41,7 @@
             </lvc:CartesianChart>
 
             <!-- Индикатор технического анализа -->
-            <local:TechAnalysisView  HorizontalAlignment="Left" VerticalAlignment="Top" Grid.Row="1" />
+            <local:TechAnalysisView  HorizontalAlignment="Left" VerticalAlignment="Top" Grid.Row="1"  TechnicalAnalysisResult="{Binding TechnicalAnalysisResult }"/>
         </Grid>
     </Grid>
 </Page>
