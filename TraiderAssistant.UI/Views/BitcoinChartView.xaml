@@ -11,7 +11,7 @@
       DataContext="{Binding BitcoinChartViewModel}">
 
     <Grid>
-        <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}" HorizontalAlignment="Left" Width="70" VerticalAlignment="Top"  Margin="10,10,0,0"/>
+        <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}" HorizontalAlignment="Left"  VerticalAlignment="Top"  Margin="10,10,0,0"/>
         <Button Content="1 day" Command="{Binding LoadDayDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="100,10,0,0"/>
         <Button Content="1 week" Command="{Binding LoadWeekDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="150,10,0,0"/>
         <Button Content="1 month" Command="{Binding LoadMonthDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="200,10,0,0"/>
