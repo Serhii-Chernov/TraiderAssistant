@@ -21,7 +21,7 @@ namespace TraiderAssistant.UI.ViewModels
                 indicatorValue = value;
                 //MessageBox.Show($"TechAnalysisViewModel. indicatorValue :{value}");
                 OnPropertyChanged();
-                UpdateIndicator();
+                //UpdateIndicator();
             }
         }
 
@@ -40,7 +40,7 @@ namespace TraiderAssistant.UI.ViewModels
         public TechAnalysisViewModel()
         {
             techAnalysisService = new TechnicalAnalysisService();
-            IndicatorValue = 50; // Нейтрально
+            IndicatorValue = 0; // Нейтрально
         }
 
         private void UpdateIndicator()
@@ -58,10 +58,11 @@ namespace TraiderAssistant.UI.ViewModels
                 ResultText = "Покупать";
         }
 
-        public void PerformTechnicalAnalysis(IEnumerable<double> closePrices)
+        public double PerformTechnicalAnalysis(IEnumerable<double> closePrices)
         {
             IndicatorValue = techAnalysisService.CalculateRSI(closePrices);
-            IndicatorValue = -10;
+            return IndicatorValue;
+            //IndicatorValue = -10;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

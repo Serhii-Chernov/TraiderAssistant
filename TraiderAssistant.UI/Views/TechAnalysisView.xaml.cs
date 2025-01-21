@@ -14,7 +14,6 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using TraiderAssistant.Infrastructure.Services;
-using TraiderAssistant.UI.Converters;
 using TraiderAssistant.UI.ViewModels;
 
 namespace TraiderAssistant.UI.Views
@@ -22,7 +21,7 @@ namespace TraiderAssistant.UI.Views
 
     public partial class TechAnalysisView : UserControl
     {
-        private TechAnalysisViewModel viewModel;
+        //private TechAnalysisViewModel viewModel;
         private Line arrow;
 
         public static readonly DependencyProperty TechnicalAnalysisResultProperty =
@@ -36,7 +35,7 @@ namespace TraiderAssistant.UI.Views
 
         public TechAnalysisView()
         {
-            viewModel = new TechAnalysisViewModel();
+            //viewModel = new TechAnalysisViewModel();
             InitializeComponent();
         }
 
@@ -56,50 +55,35 @@ namespace TraiderAssistant.UI.Views
                 DrawSectors(canvas);
                 DrawArrow(canvas);
 
-
-                //// Пример изменения размера круга в зависимости от значения индикатора
-                //double radius = 50 + TechnicalAnalysisResult.Indicator * 10;
-                //double centerX = AnalysisCanvas.Width / 2;
-                //double centerY = AnalysisCanvas.Height / 2;
-
-                //var circle = new Ellipse
-                //{
-                //    Width = radius * 2,
-                //    Height = radius * 2,
-                //    Fill = Brushes.Red
-                //};
-
-                //Canvas.SetLeft(circle, centerX - radius);
-                //Canvas.SetTop(circle, centerY - radius);
-
-                //AnalysisCanvas.Children.Add(circle);
-
-                //// Добавьте здесь дополнительную логику для создания более сложных фигур
             }
         }
 
         private void DrawSectors(Canvas canvas)
         {
+            /// <summary>
+            /// Расхардкодить.
+            /// </summary>
             // Центр круга
-            double centerX = 100;
-            double centerY = 100;
-            double outerRadius = 75; // Радиус внешней дуги
-            double innerRadius = 65; // Радиус внутренней дуги
+            double centerX = canvas.Width*0.5;//100
+            double centerY = canvas.Height*0.9;//100
+            double outerRadius = canvas.Height * 0.75; // Радиус внешней дуги
+            double innerRadius = canvas.Height * 0.65; // Радиус внутренней дуги
 
             // Углы секторов (в градусах)
-            double[] sectorAngles = { 36, 36, 36, 36, 36 }; // 5 равных секторов по 36°
-            Brush[] sectorColors = { Brushes.Red, Brushes.Orange, Brushes.LightGray, Brushes.LightGreen, Brushes.Green };
+            //double[] sectorAngles = { 36, 36, 36, 36, 36 }; // 5 равных секторов по 36°
+            Brush[] sectorColors = { Brushes.Green, Brushes.LightGreen, Brushes.LightGray, Brushes.Orange , Brushes.Red };
+            double sectorAngle = 180 / sectorColors.Length;
 
             double currentAngle = 0; // Начальный угол
 
-            for (int i = 0; i < sectorAngles.Length; i++)
+            for (int i = 0; i < sectorColors.Length; i++)
             {
                 // Создаем сектор
-                var path = CreateOuterArc(centerX, centerY, outerRadius, innerRadius, currentAngle, currentAngle + sectorAngles[i]);
+                var path = CreateOuterArc(centerX, centerY, outerRadius, innerRadius, currentAngle, currentAngle + sectorAngle);
                 path.Fill = sectorColors[i];
                 canvas.Children.Add(path);
                 // Смещаем текущий угол для следующего сектора
-                currentAngle += sectorAngles[i];
+                currentAngle += sectorAngle;
             }
         }
 
@@ -171,9 +155,13 @@ namespace TraiderAssistant.UI.Views
 
         private void DrawArrow(Canvas canvas)
         {
-            double centerX = 100;
-            double centerY = 100;
-            double radius = 90;
+            /// <summary>
+            /// Расхардкодить.
+            /// </summary>
+            double centerX = canvas.Width * 0.5; //100
+            double centerY = canvas.Height * 0.9; //100
+            double radius = canvas.Height* 0.8; //90
+
             // Обновляем угол поворота стрелки в зависимости от значения индикатора
             double angle = IndicatorToAngle(TechnicalAnalysisResult.Indicator);
             double angleRadian = DegreesToRadians(angle);
@@ -188,8 +176,6 @@ namespace TraiderAssistant.UI.Views
             {
                 X1 = centerX,
                 Y1 = centerY,
-                //X2 = canvas.Width/2,
-                //Y2 = 0,
                 X2 = pointX,
                 Y2 = pointY,
                 Stroke = Brushes.Black,
