@@ -22,6 +22,26 @@ namespace TraiderAssistant.UI.ViewModels
         public SeriesCollection Series { get; set; }
         public ObservableCollection<string> Labels { get; set; }
         public Func<double, string> YFormatter { get; set; }
+        private readonly TechAnalysisViewModel _techAnalysisViewModel;
+
+        public ICommand LoadDayDataCommand { get; }
+        public ICommand LoadWeekDataCommand { get; }
+        public ICommand LoadMonthDataCommand { get; }
+        public ICommand LoadYearDataCommand { get; }
+        public ICommand LoadTechnicalAnalysisCommand { get; }
+
+        private TechnicalAnalysisResult _technicalAnalysisResult;
+        public TechnicalAnalysisResult TechnicalAnalysisResult
+        {
+            get { return _technicalAnalysisResult; }
+            set
+            {
+                _technicalAnalysisResult = value;
+                OnPropertyChanged(nameof(TechnicalAnalysisResult));
+            }
+        }
+
+        public List<string> ChartTypes { get; }
 
         private string _selectedChartType;
         public string SelectedChartType
@@ -35,32 +55,31 @@ namespace TraiderAssistant.UI.ViewModels
             }
         }
 
-        public NotcoinChartViewModel()
+        public NotcoinChartViewModel(TechAnalysisViewModel techAnalysisViewModel)
         {
             _binanceService = new BinanceService("GiKaEHJMkSrkwO5gHCLp9uxnDcgOORyi00H4jLSxEPEN0TverkaHehtE5b3Pv0TO", "nKNGZT4e2lvreHa7OX8ZaR7uGK3TkfVSHRDIHGSD3XODM1H4wtJaGK10ga9oaQ3e");
 
+            _techAnalysisViewModel = techAnalysisViewModel;
             LoadDayDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow));
             LoadWeekDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow));
             LoadMonthDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddMonths(-1), DateTime.UtcNow));
             LoadYearDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddYears(-1), DateTime.UtcNow));
-            LoadTechnicalAnalysisCommand = new RelayCommand(OpenTechnicalAnalysisWindow);
+            //LoadTechnicalAnalysisCommand = new RelayCommand(OpenTechnicalAnalysisWindow);
 
             ChartTypes = new List<string> { "Line", "Area", "Candle" };
             SelectedChartType = "Line"; // Установите начальный стиль графика
 
             YFormatter = value => value.ToString("N5"); // Округление до целых чисел
 
-            LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow).ConfigureAwait(false); // Вызов метода при инициализации
+            InitializeAsync().ConfigureAwait(false);
+            //LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow).ConfigureAwait(false); // Вызов метода при инициализации
         }
 
-        public ICommand LoadDayDataCommand { get; }
-        public ICommand LoadWeekDataCommand { get; }
-        public ICommand LoadMonthDataCommand { get; }
-        public ICommand LoadYearDataCommand { get; }
-        public ICommand LoadTechnicalAnalysisCommand { get; }
-
-
-        public List<string> ChartTypes { get; }
+        private async Task InitializeAsync()
+        {
+            await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow);
+            InitializeTechnicalAnalysis();
+        }
 
         private async Task LoadDataAsync(DateTime startTime, DateTime endTime)
         {
@@ -107,22 +126,11 @@ namespace TraiderAssistant.UI.ViewModels
             OnPropertyChanged(nameof(Labels));
         }
 
-        private void OpenTechnicalAnalysisWindow()
+        private void InitializeTechnicalAnalysis()
         {
-            var techAnalysisWindow = new Window
-            {
-                Title = "Technical Analysis",
-                Content = new TechAnalysisView(),
-                DataContext = new TechAnalysisViewModel(),
-                Width = 400,
-                Height = 400
-            };
-
             var closePrices = Series.FirstOrDefault()?.Values.Cast<decimal>().Select(v => (double)v) ?? Enumerable.Empty<double>();
-            var techAnalysisViewModel = (TechAnalysisViewModel)techAnalysisWindow.DataContext;
-            techAnalysisViewModel.PerformTechnicalAnalysis(closePrices);
-
-            techAnalysisWindow.Show();
+            var indicatorValue = _techAnalysisViewModel.PerformTechnicalAnalysis(closePrices);
+            TechnicalAnalysisResult = new TechnicalAnalysisResult(indicatorValue);
         }
 
         private Brush CreateGradientBrush(decimal[] prices)

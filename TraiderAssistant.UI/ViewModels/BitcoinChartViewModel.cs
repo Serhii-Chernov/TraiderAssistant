@@ -31,7 +31,7 @@ namespace TraiderAssistant.UI.ViewModels
         public ICommand AnalyzeCommand { get; }
         //public ICommand LoadTechnicalAnalysisCommand { get; }
 
-        public readonly List<string> ChartTypes = new List<string> { "Line", "Area", "Candle" };
+        public List<string> ChartTypes { get; }
 
         private string _selectedChartType;
         public string SelectedChartType
@@ -57,6 +57,7 @@ namespace TraiderAssistant.UI.ViewModels
             //AnalyzeCommand = new RelayCommand(Analyze);
             //LoadTechnicalAnalysisCommand = new RelayCommand(OpenTechnicalAnalysisWindow);
 
+            ChartTypes = new List<string> { "Line", "Area", "Candle" };
             SelectedChartType = "Line"; // Установите начальный стиль графика
 
             YFormatter = value => value.ToString("N0"); // Округление до целых чисел

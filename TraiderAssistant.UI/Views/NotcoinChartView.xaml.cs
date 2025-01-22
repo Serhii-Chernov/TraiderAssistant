@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using TraiderAssistant.UI.ViewModels;
 
 namespace TraiderAssistant.UI.Views
 {
@@ -22,8 +23,9 @@ namespace TraiderAssistant.UI.Views
     {
         public NotcoinChartView()
         {
+            var techAnalysisViewModel = new TechAnalysisViewModel();
+            DataContext = new NotcoinChartViewModel(techAnalysisViewModel);
             InitializeComponent();
-            DataContext = new ViewModels.NotcoinChartViewModel();
         }
     }
 }
