@@ -5,24 +5,28 @@
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
       xmlns:lvc="clr-namespace:LiveCharts.Wpf;assembly=LiveCharts.Wpf"
       xmlns:local="clr-namespace:TraiderAssistant.UI.Views"
+      xmlns:viewModels="clr-namespace:TraiderAssistant.UI.ViewModels"
       mc:Ignorable="d" 
       d:DesignHeight="450" d:DesignWidth="800"
       Title="NotcoinChartView"
-      DataContext="{Binding NotcoinChartViewModel}">
+      d:DataContext="{d:DesignInstance viewModels:NotcoinChartViewModel}">
 
     <Grid>
-        <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}" HorizontalAlignment="Left" Width="70" VerticalAlignment="Top"  Margin="10,10,0,0"/>
-        <Button Content="1 day" Command="{Binding LoadDayDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="100,10,0,0"/>
-        <Button Content="1 week" Command="{Binding LoadWeekDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="150,10,0,0"/>
-        <Button Content="1 month" Command="{Binding LoadMonthDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="200,10,0,0"/>
-        <Button Content="1 year" Command="{Binding LoadYearDataCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="260,10,0,0"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10"  >
+            <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}"  Width="70"  />
+            <Button Content="1 day" Command="{Binding LoadDayDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 week" Command="{Binding LoadWeekDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 month" Command="{Binding LoadMonthDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 year" Command="{Binding LoadYearDataCommand}" Padding="5, 0, 5, 0" />
+        </StackPanel>
         <!--<Button Content="Technical Analysis" Command="{Binding LoadTechnicalAnalysisCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="320,10,0,0"/>-->
 
         <!-- Разметка для отображения данных -->
-        <Grid Margin="10,50,10,10">
+        <!-- Разметка для отображения данных -->
+        <Grid Margin="10,40,10,0" >
             <Grid.RowDefinitions>
                 <RowDefinition Height="3*"/>
-                <RowDefinition Height="1*"/>
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
             <!-- График -->
@@ -36,7 +40,7 @@
             </lvc:CartesianChart>
 
             <!-- Индикатор технического анализа -->
-            <local:TechAnalysisView Grid.Row="2" HorizontalAlignment="Left" VerticalAlignment="Top" />
+            <local:TechAnalysisView  HorizontalAlignment="Left"  Grid.Row="1"  TechnicalAnalysisResult="{Binding TechnicalAnalysisResult }"/>
         </Grid>
     </Grid>
 </Page>

@@ -4,13 +4,17 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:TraiderAssistant.UI.Views"
-             xmlns:converters="clr-namespace:TraiderAssistant.UI.Converters"
-             mc:Ignorable="d" 
-             d:DesignHeight="300" d:DesignWidth="300">
-    <!--<UserControl.Resources>
-        <converters:IndicatorValueToAngleConverter x:Key="IndicatorValueToAngleConverter"/>
-    </UserControl.Resources>-->
-    <Button Content="{Binding IndicatorValue}" VerticalAlignment="Top" />
+             mc:Ignorable="d"
+             d:DesignHeight="150" d:DesignWidth="200">
+
+    <Viewbox StretchDirection="DownOnly">
+        <StackPanel>
+            <TextBox Text="{Binding TechnicalAnalysisResult.ResultText}"  />
+            <Border BorderBrush="Black" BorderThickness="1" CornerRadius="5">
+                <Canvas x:Name="AnalysisCanvas" Width="200" Height="100" Background="White"/>
+            </Border>
+        </StackPanel>
+    </Viewbox>
 
 
 </UserControl>
