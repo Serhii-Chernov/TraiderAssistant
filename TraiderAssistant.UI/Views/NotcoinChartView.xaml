@@ -14,10 +14,10 @@
     <Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10"  >
             <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}"  Width="70"  />
-            <Button Content="1 day" Command="{Binding LoadDayDataCommand}"  />
-            <Button Content="1 week" Command="{Binding LoadWeekDataCommand}"  />
-            <Button Content="1 month" Command="{Binding LoadMonthDataCommand}"  />
-            <Button Content="1 year" Command="{Binding LoadYearDataCommand}"  />
+            <Button Content="1 day" Command="{Binding LoadDayDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 week" Command="{Binding LoadWeekDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 month" Command="{Binding LoadMonthDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 year" Command="{Binding LoadYearDataCommand}" Padding="5, 0, 5, 0" />
         </StackPanel>
         <!--<Button Content="Technical Analysis" Command="{Binding LoadTechnicalAnalysisCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="320,10,0,0"/>-->
 
