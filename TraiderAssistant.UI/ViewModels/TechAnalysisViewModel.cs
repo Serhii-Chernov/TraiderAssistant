@@ -19,22 +19,21 @@ namespace TraiderAssistant.UI.ViewModels
             set
             {
                 indicatorValue = value;
-                //MessageBox.Show($"TechAnalysisViewModel. indicatorValue :{value}");
                 OnPropertyChanged();
                 //UpdateIndicator();
             }
         }
 
-        private string resultText;
-        public string ResultText
-        {
-            get => resultText;
-            private set
-            {
-                resultText = value;
-                OnPropertyChanged();
-            }
-        }
+        //private string resultText;
+        //public string ResultText
+        //{
+        //    get => resultText;
+        //    private set
+        //    {
+        //        resultText = value;
+        //        OnPropertyChanged();
+        //    }
+        //}
         TechnicalAnalysisService techAnalysisService;
 
         public TechAnalysisViewModel()
@@ -43,24 +42,24 @@ namespace TraiderAssistant.UI.ViewModels
             IndicatorValue = 0; // Нейтрально
         }
 
-        private void UpdateIndicator()
-        {
-            // Обновляем текст и угол стрелки
-            if (IndicatorValue < -50)
-                ResultText = "Активно продавать";
-            else if (IndicatorValue < 0)
-                ResultText = "Продавать";
-            else if (IndicatorValue == 0)
-                ResultText = "Нейтрально";
-            else if (IndicatorValue > 50)
-                ResultText = "Активно покупать";
-            else
-                ResultText = "Покупать";
-        }
+        //private void UpdateIndicator()
+        //{
+        //    // Обновляем текст и угол стрелки
+        //    if (IndicatorValue < -50)
+        //        ResultText = "Активно продавать";
+        //    else if (IndicatorValue < 0)
+        //        ResultText = "Продавать";
+        //    else if (IndicatorValue == 0)
+        //        ResultText = "Нейтрально";
+        //    else if (IndicatorValue > 50)
+        //        ResultText = "Активно покупать";
+        //    else
+        //        ResultText = "Покупать";
+        //}
 
-        public double PerformTechnicalAnalysis(IEnumerable<double> closePrices)
+        public double PerformTechnicalAnalysis(IEnumerable<double> closePrices, IEnumerable<decimal> hights, IEnumerable<decimal> lows, int period)
         {
-            IndicatorValue = techAnalysisService.CalculateRSI(closePrices);
+            IndicatorValue = techAnalysisService.CalculateRSI(closePrices, hights, lows, period);
             return IndicatorValue;
             //IndicatorValue = -10;
         }

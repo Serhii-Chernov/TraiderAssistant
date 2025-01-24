@@ -8,7 +8,7 @@ namespace TraiderAssistant.Infrastructure.Services
 {
     public class TechnicalAnalysisService
     {
-        public double CalculateRSI(IEnumerable<double> closePrices, int period = 14)
+        public double CalculateRSI(IEnumerable<double> closePrices, IEnumerable<decimal> hights, IEnumerable<decimal> lows, int period)
         {
             var gains = new List<double>();
             var losses = new List<double>();

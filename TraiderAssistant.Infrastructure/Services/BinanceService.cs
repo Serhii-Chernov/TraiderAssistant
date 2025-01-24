@@ -9,12 +9,19 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Xceed.Wpf.Toolkit;
 
 namespace TraiderAssistant.Infrastructure.Services
 {
+    public enum CurrencyPair
+    {
+        BTCUSDT,
+        NOTUSDT
+    }
     public class BinanceService
     {
         private readonly BinanceRestClient _client;
+        private readonly CurrencyPair currency;
         //private readonly MLContext _mlContext;
         //private ITransformer _model;
 
@@ -24,18 +31,16 @@ namespace TraiderAssistant.Infrastructure.Services
         /// <param name="apiKey"></param>
         /// <param name="apiSecret"></param>
 
-        public BinanceService(string apiKey, string apiSecret)
+        public BinanceService(CurrencyPair currencyPair)
         {
-            _client = new BinanceRestClient(options =>
-            {
-                options.ApiCredentials = new ApiCredentials(apiKey, apiSecret);
-            });
+            _client = new BinanceRestClient();
+            this.currency = currencyPair;
             //_mlContext = new MLContext();
         }
 
-        public async Task<IEnumerable<BinanceSpotKline>> GetBitcoinDataAsync(DateTime startTime, DateTime endTime)
+        public async Task<IEnumerable<BinanceSpotKline>> GetChartDataAsync(DateTime startTime, DateTime endTime)
         {
-            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync("BTCUSDT", KlineInterval.FifteenMinutes, startTime, endTime);
+            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currency.ToString(), KlineInterval.FifteenMinutes, startTime, endTime);
             if (result.Success)
             {
                 return result.Data.Cast<BinanceSpotKline>();
@@ -46,18 +51,32 @@ namespace TraiderAssistant.Infrastructure.Services
             }
         }
 
-        public async Task<IEnumerable<BinanceSpotKline>> GetNotcoinDataAsync(DateTime startTime, DateTime endTime)
-        {
-            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync("NOTUSDT", KlineInterval.FifteenMinutes, startTime, endTime);
-            if (result.Success)
-            {
-                return result.Data.Cast<BinanceSpotKline>();
-            }
-            else
-            {
-                throw new Exception(result.Error.Message);
-            }
-        }
+        //public async Task<IEnumerable<BinanceSpotKline>> GetBitcoinDataAsync(DateTime startTime, DateTime endTime)
+        //{
+        //    var result = await _client.SpotApi.ExchangeData.GetKlinesAsync("BTCUSDT", KlineInterval.FifteenMinutes, startTime, endTime);
+        //    if (result.Success)
+        //    {
+        //        return result.Data.Cast<BinanceSpotKline>();
+        //    }
+        //    else
+        //    {
+        //        throw new Exception(result.Error.Message);
+        //    }
+        //}
+
+        //public async Task<IEnumerable<BinanceSpotKline>> GetNotcoinDataAsync(DateTime startTime, DateTime endTime)
+        //{
+        //    var result = await _client.SpotApi.ExchangeData.GetKlinesAsync("NOTUSDT", KlineInterval.FifteenMinutes, startTime, endTime);
+        //    if (result.Success)
+        //    {
+        //        return result.Data.Cast<BinanceSpotKline>();
+        //    }
+        //    else
+        //    {
+        //        throw new Exception(result.Error.Message);
+        //    }
+        //}
+
     }
 
     //    public async Task TrainModelAsync(DateTime startTime, DateTime endTime)
