@@ -57,9 +57,9 @@ namespace TraiderAssistant.UI.ViewModels
         //        ResultText = "Покупать";
         //}
 
-        public double PerformTechnicalAnalysis(IEnumerable<double> closePrices, IEnumerable<decimal> hights, IEnumerable<decimal> lows, int period)
+        public double PerformTechnicalAnalysis(IEnumerable<decimal> closePrices, IEnumerable<decimal> hights, IEnumerable<decimal> lows, int period)
         {
-            IndicatorValue = techAnalysisService.CalculateRSI(closePrices, hights, lows, period);
+            IndicatorValue = techAnalysisService.GetTechnicalAnalysis(closePrices, hights, lows, period);
             return IndicatorValue;
             //IndicatorValue = -10;
         }

@@ -92,6 +92,7 @@ namespace TraiderAssistant.UI.ViewModels
 
         private async Task LoadDataAsync(DateTime startTime, DateTime endTime)
         {
+            //Period = endTime.Subtract(startTime).Days;
             var data = await _binanceService.GetChartDataAsync(startTime, endTime);
             var prices = data.Select(k => k.ClosePrice).ToArray();
             var dates = data.Select(k => k.CloseTime.ToString("dd/MM/yyyy")).ToArray();
@@ -137,6 +138,7 @@ namespace TraiderAssistant.UI.ViewModels
             OnPropertyChanged(nameof(Labels));
             OnPropertyChanged(nameof(Hights));
             OnPropertyChanged(nameof(Lows));
+            //OnPropertyChanged(nameof(Period));
         }
 
         private void InitializeTechnicalAnalysis()
