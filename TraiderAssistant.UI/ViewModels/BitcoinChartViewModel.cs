@@ -125,7 +125,7 @@ namespace TraiderAssistant.UI.ViewModels
             var closePrices = Series.FirstOrDefault()?.Values.Cast<decimal>().Select(v => (double)v) ?? Enumerable.Empty<double>();
             //var indicatorValue = _techAnalysisViewModel.PerformTechnicalAnalysis(closePrices);
             var indicatorValue = 30;
-            TechnicalAnalysisResult = new TechnicalAnalysisResult(indicatorValue);
+            //TechnicalAnalysisResult = new TechnicalAnalysisResult(indicatorValue);
         }
 
         private Brush CreateGradientBrush(decimal[] prices)

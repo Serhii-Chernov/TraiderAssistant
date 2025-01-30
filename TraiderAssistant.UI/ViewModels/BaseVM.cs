@@ -28,9 +28,9 @@ namespace TraiderAssistant.UI.ViewModels
         public ObservableCollection<string> Labels { get; set; }
         public Func<double, string> YFormatter { get; set; }//убрать в конкретный VM
         private readonly TechAnalysisViewModel _techAnalysisViewModel;
-        private IEnumerable<decimal> Hights { get; set; }
-        private IEnumerable<decimal> Lows { get; set; }
-        public int Period { get; set; }
+        //private IEnumerable<decimal> Hights { get; set; }
+        //private IEnumerable<decimal> Lows { get; set; }
+        //public int Period { get; set; }
 
         public ICommand LoadDayDataCommand { get; }
         public ICommand LoadWeekDataCommand { get; }
@@ -76,7 +76,7 @@ namespace TraiderAssistant.UI.ViewModels
 
             //ChartTypes = new List<string> { "Line", "Area", "Candle" };
             SelectedChartViewType = 0; // начальный стиль графика
-            Period=14; // начальный период для технического анализа
+            //Period=14; // начальный период для технического анализа
 
             YFormatter = value => value.ToString("N5"); // Округление до целых чисел
 
@@ -87,7 +87,7 @@ namespace TraiderAssistant.UI.ViewModels
         private async Task InitializeAsync()
         {
             await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow);
-            InitializeTechnicalAnalysis();
+            await InitializeTechnicalAnalysis(DateTime.UtcNow.AddMinutes(-250), DateTime.UtcNow);
         }
 
         private async Task LoadDataAsync(DateTime startTime, DateTime endTime)
@@ -96,8 +96,7 @@ namespace TraiderAssistant.UI.ViewModels
             var data = await _binanceService.GetChartDataAsync(startTime, endTime);
             var prices = data.Select(k => k.ClosePrice).ToArray();
             var dates = data.Select(k => k.CloseTime.ToString("dd/MM/yyyy")).ToArray();
-            Hights = data.Select(k => k.HighPrice).ToArray();
-            Lows = data.Select(k => k.LowPrice).ToArray();
+            
 
             Series = new SeriesCollection();
 
@@ -136,16 +135,18 @@ namespace TraiderAssistant.UI.ViewModels
             Labels = new ObservableCollection<string>(dates);
             OnPropertyChanged(nameof(Series));
             OnPropertyChanged(nameof(Labels));
-            OnPropertyChanged(nameof(Hights));
-            OnPropertyChanged(nameof(Lows));
+            
             //OnPropertyChanged(nameof(Period));
         }
 
-        private void InitializeTechnicalAnalysis()
+        private async Task InitializeTechnicalAnalysis(DateTime startTime, DateTime endTime)
         {
-            var closePrices = Series.FirstOrDefault()?.Values.Cast<decimal>().Select(v => (double)v) ?? Enumerable.Empty<double>();
-            var indicatorValue = _techAnalysisViewModel.PerformTechnicalAnalysis(closePrices, Hights, Lows, Period);
-            TechnicalAnalysisResult = new TechnicalAnalysisResult(indicatorValue);
+            var data = await _binanceService.GetChartDataForIndicatorsAsync(endTime);
+            
+
+            //var closePrices = Series.FirstOrDefault()?.Values.Cast<decimal>().Select(v => (decimal)v) ?? Enumerable.Empty<decimal>();
+            TechnicalAnalysisResult = _techAnalysisViewModel.PerformTechnicalAnalysis(data);
+            //TechnicalAnalysisResult = new TechnicalAnalysisResult(indicatorValue);
         }
 
         private Brush CreateGradientBrush(decimal[] prices)

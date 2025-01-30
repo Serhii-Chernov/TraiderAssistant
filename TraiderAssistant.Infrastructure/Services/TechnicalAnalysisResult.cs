@@ -8,14 +8,17 @@ namespace TraiderAssistant.Infrastructure.Services
 {
     public class TechnicalAnalysisResult
     {
-        public TechnicalAnalysisResult(double indicator)
+        public double Indicator { get; set; }
+        public string ResultText { get; set; }
+        private Dictionary<string, decimal> osciliators;
+        public TechnicalAnalysisResult(double indicator, Dictionary<string, decimal> osciliators)
         {
             Indicator = indicator;
+            this.osciliators = osciliators;
             UpdateResultText();
         }
 
-        public double Indicator { get; set; }
-        public string ResultText { get; set; }
+        
         private void UpdateResultText()
         {
             if (Indicator != 0)

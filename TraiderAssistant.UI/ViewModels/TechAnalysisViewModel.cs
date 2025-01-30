@@ -1,4 +1,5 @@
-﻿using LiveCharts.Wpf;
+﻿using Binance.Net.Objects.Models.Spot;
+using LiveCharts.Wpf;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -57,11 +58,12 @@ namespace TraiderAssistant.UI.ViewModels
         //        ResultText = "Покупать";
         //}
 
-        public double PerformTechnicalAnalysis(IEnumerable<decimal> closePrices, IEnumerable<decimal> hights, IEnumerable<decimal> lows, int period)
+        public TechnicalAnalysisResult PerformTechnicalAnalysis(IEnumerable<BinanceSpotKline> data)
         {
-            IndicatorValue = techAnalysisService.GetTechnicalAnalysis(closePrices, hights, lows, period);
-            return IndicatorValue;
-            //IndicatorValue = -10;
+            //var result = techAnalysisService.GetTechnicalAnalysis(closePrices, hights, lows, period);
+            return techAnalysisService.GetTechnicalAnalysis(data);
+            //IndicatorValue = techAnalysisService.GetTechnicalAnalysis(closePrices, hights, lows, period);
+            //return IndicatorValue;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
