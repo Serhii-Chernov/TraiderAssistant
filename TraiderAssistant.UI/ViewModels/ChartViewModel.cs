@@ -15,22 +15,20 @@ using TraiderAssistant.Infrastructure.Services;
 
 namespace TraiderAssistant.UI.ViewModels
 {
-    public enum ChartViewType
-    {
-        Line,
-        Area,
-        Candle
-    }
-    public class BaseVM : INotifyPropertyChanged
+    //public enum ChartViewType
+    //{
+    //    Line,
+    //    Area,
+    //    Candle
+    //}
+    public class ChartViewModel : INotifyPropertyChanged
     {
         private readonly BinanceService _binanceService;
         public SeriesCollection Series { get; set; }
         public ObservableCollection<string> Labels { get; set; }
         public Func<double, string> YFormatter { get; set; }//убрать в конкретный VM
         private readonly TechAnalysisViewModel _techAnalysisViewModel;
-        //private IEnumerable<decimal> Hights { get; set; }
-        //private IEnumerable<decimal> Lows { get; set; }
-        //public int Period { get; set; }
+        public CurrencyPair CurrencyPair { get; set; }
 
         public ICommand LoadDayDataCommand { get; }
         public ICommand LoadWeekDataCommand { get; }
@@ -49,39 +47,37 @@ namespace TraiderAssistant.UI.ViewModels
             }
         }
 
-        //public List<string> ChartTypes { get; }
+        public List<string> ChartTypes { get; }
 
-        private int _selectedChartViewType;
-        public int SelectedChartViewType
+        private string _selectedChartType;
+        public string SelectedChartType
         {
-            get => _selectedChartViewType;
+            get => _selectedChartType;
             set
             {
-                _selectedChartViewType = value;
-                OnPropertyChanged(nameof(SelectedChartViewType));
+                _selectedChartType = value;
+                OnPropertyChanged(nameof(SelectedChartType));
                 LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow).ConfigureAwait(false); // Перезагрузка данных при изменении стиля графика
             }
         }
 
-        public BaseVM(TechAnalysisViewModel techAnalysisViewModel, CurrencyPair currencyPair)
+        public ChartViewModel(TechAnalysisViewModel techAnalysisViewModel, CurrencyPair currencyPair)
         {
-            _binanceService = new BinanceService(currencyPair);
+            CurrencyPair = currencyPair;
+            _binanceService = new BinanceService(CurrencyPair);
 
             _techAnalysisViewModel = techAnalysisViewModel;
             LoadDayDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow));
             LoadWeekDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow));
             LoadMonthDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddMonths(-1), DateTime.UtcNow));
             LoadYearDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddYears(-1), DateTime.UtcNow));
-            //LoadTechnicalAnalysisCommand = new RelayCommand(OpenTechnicalAnalysisWindow);
 
-            //ChartTypes = new List<string> { "Line", "Area", "Candle" };
-            SelectedChartViewType = 0; // начальный стиль графика
-            //Period=14; // начальный период для технического анализа
+            ChartTypes = new List<string> { "Line", "Area", "Candle" };
+            SelectedChartType = "Line"; // Установите начальный стиль графика
 
             YFormatter = value => value.ToString("N5"); // Округление до целых чисел
 
             InitializeAsync().ConfigureAwait(false);
-            //LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow).ConfigureAwait(false); // Вызов метода при инициализации
         }
 
         private async Task InitializeAsync()
@@ -100,9 +96,9 @@ namespace TraiderAssistant.UI.ViewModels
 
             Series = new SeriesCollection();
 
-            switch (SelectedChartViewType)
+            switch (SelectedChartType)
             {
-                case 0:
+                case "Line":
                     Series.Add(new LineSeries
                     {
                         Title = "Notcoin",
@@ -111,7 +107,7 @@ namespace TraiderAssistant.UI.ViewModels
                         PointGeometrySize = 0 // Устанавливаем размер кругов в 0
                     });
                     break;
-                case 1:
+                case "Area":
                     Series.Add(new LineSeries
                     {
                         Title = "Notcoin",
@@ -122,7 +118,7 @@ namespace TraiderAssistant.UI.ViewModels
                         PointGeometrySize = 0 // Устанавливаем размер кругов в 0
                     });
                     break;
-                case 2:
+                case "Candle":
                     var candleData = data.Select(k => new OhlcPoint((double)k.OpenPrice, (double)k.HighPrice, (double)k.LowPrice, (double)k.ClosePrice)).ToArray();
                     Series.Add(new CandleSeries
                     {
@@ -135,18 +131,12 @@ namespace TraiderAssistant.UI.ViewModels
             Labels = new ObservableCollection<string>(dates);
             OnPropertyChanged(nameof(Series));
             OnPropertyChanged(nameof(Labels));
-            
-            //OnPropertyChanged(nameof(Period));
         }
 
         private async Task InitializeTechnicalAnalysis(DateTime startTime, DateTime endTime)
         {
             var data = await _binanceService.GetChartDataForIndicatorsAsync(endTime);
-            
-
-            //var closePrices = Series.FirstOrDefault()?.Values.Cast<decimal>().Select(v => (decimal)v) ?? Enumerable.Empty<decimal>();
             TechnicalAnalysisResult = _techAnalysisViewModel.PerformTechnicalAnalysis(data);
-            //TechnicalAnalysisResult = new TechnicalAnalysisResult(indicatorValue);
         }
 
         private Brush CreateGradientBrush(decimal[] prices)

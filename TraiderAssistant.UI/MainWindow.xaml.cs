@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using TraiderAssistant.Infrastructure.Services;
 using TraiderAssistant.UI.Views;
 
 namespace TraiderAssistant.UI
@@ -24,12 +25,12 @@ namespace TraiderAssistant.UI
         private void BitcoinButton_Click(object sender, RoutedEventArgs e)
         {
             // Загружаем BitcoinChartView в Frame
-            MainContent.Navigate(new BitcoinChartView());
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.BTCUSDT));
         }
 
         private void NotcoinButton_Click(object sender, RoutedEventArgs e)
         {
-            MainContent.Navigate(new NotcoinChartView());
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.NOTUSDT));
         }
     }
 }
