@@ -25,7 +25,7 @@ namespace TraiderAssistant.UI.Views
         public CurrencyChartView(CurrencyPair currencyPair)
         {
             var techAnalysisViewModel = new TechAnalysisViewModel();
-            DataContext = new ChartViewModel(techAnalysisViewModel, currencyPair);
+            DataContext = new CurrencyChartViewModel(techAnalysisViewModel, currencyPair);
             InitializeComponent();
         }
     }

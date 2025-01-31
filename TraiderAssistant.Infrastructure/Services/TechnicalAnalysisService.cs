@@ -1,6 +1,7 @@
 ﻿using Binance.Net.Objects.Models.Spot;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -37,73 +38,12 @@ namespace TraiderAssistant.Infrastructure.Services
             osciliators.Add("BullBearPower", CalculateBullBearPower());
             osciliators.Add("StochasticRSI", CalculateStochasticRSI());
 
-            var indicator = CalculateIndicatorValue(osciliators);
+            var MAs = CalculateMovingAverages(closePrices);
 
-            TechnicalAnalysisResult technicalAnalysisResult = new TechnicalAnalysisResult((double)indicator, osciliators);
+            TechnicalAnalysisResult technicalAnalysisResult = new TechnicalAnalysisResult(osciliators, MAs);
             return technicalAnalysisResult;
         }
-
-
-        private decimal CalculateIndicatorValue(Dictionary<string, decimal> osciliators)
-        {
-            // Получаем значения индикаторов
-            decimal rsi = osciliators["RSI"];
-            decimal stochasticK = osciliators["StochasticK"];
-            decimal cci = osciliators["CCI"];
-            decimal adx = osciliators["ADX"];
-            decimal ao = osciliators["AO"];
-            decimal momentum = osciliators["Momentum"];
-            decimal macd = osciliators["MACD"];
-            decimal uo = osciliators["UltimateOscillator"];
-            decimal williamsR = osciliators["WilliamsR"];
-            decimal bullBearPower = osciliators["BullBearPower"];
-            decimal stochasticRSI = osciliators["StochasticRSI"];
-
-            // Функция ограничения значений
-            decimal Clamp(decimal value, decimal min, decimal max) => Math.Max(min, Math.Min(max, value));
-
-            // Нормализация индикаторов
-            decimal normalizedRSI = rsi * 2 - 100;                    // Приводим к диапазону [-100, 100]
-            decimal normalizedStochasticK = stochasticK * 2 - 100;    // Аналогично RSI
-            decimal normalizedCCI = Clamp(cci, -200, 200);            // Ограничиваем CCI
-            decimal normalizedADX = adx * 2 - 100;                    // Аналогично RSI
-            decimal normalizedAO = Clamp(ao, -100, 100);              // AO уже в [-100, 100]
-            decimal normalizedMomentum = Clamp(momentum, -100, 100);  // Momentum уже в [-100, 100]
-            decimal normalizedMACD = macd;                            // MACD оставляем как есть
-            decimal normalizedUO = uo * 2 - 100;                      // Ultimate Oscillator к [-100, 100]
-            decimal normalizedWilliamsR = -Clamp(williamsR, -100, 0); // Williams %R инвертируем: [-100, 0] → [0, 100]
-            decimal normalizedBullBearPower = Clamp(bullBearPower, -100, 100); // Ограничиваем диапазон
-            decimal normalizedStochasticRSI = stochasticRSI * 2 - 100; // Аналогично StochasticK
-
-            // Весовые коэффициенты индикаторов
-            decimal weightRSI = 0.15m;
-            decimal weightStochasticK = 0.1m;
-            decimal weightCCI = 0.1m;
-            decimal weightADX = 0.15m;
-            decimal weightAO = 0.1m;
-            decimal weightMomentum = 0.1m;
-            decimal weightMACD = 0.1m;
-            decimal weightUO = 0.1m;
-            decimal weightWilliamsR = 0.1m;
-            decimal weightBullBearPower = 0.1m;
-            decimal weightStochasticRSI = 0.1m;
-
-            // Расчёт итогового значения индикатора (взвешенная сумма)
-            decimal indicatorValue =
-                normalizedRSI * weightRSI +
-                normalizedStochasticK * weightStochasticK +
-                normalizedCCI * weightCCI +
-                normalizedADX * weightADX +
-                normalizedAO * weightAO +
-                normalizedMomentum * weightMomentum +
-                normalizedMACD * weightMACD +
-                normalizedUO * weightUO +
-                normalizedWilliamsR * weightWilliamsR +
-                normalizedBullBearPower * weightBullBearPower +
-                normalizedStochasticRSI * weightStochasticRSI;
-
-            return indicatorValue;
-        }
+        
 
 
 
@@ -348,7 +288,65 @@ namespace TraiderAssistant.Infrastructure.Services
             return ema;
         }
 
+        // Метод для вычисления простого скользящего среднего
+        private decimal CalculateSMA( int period,IEnumerable<decimal> prices)
+        {
+            if (prices.Count() < period)
+                throw new InvalidOperationException("Недостаточно данных для расчета SMA");
 
+            return prices.TakeLast(period).Average();
+        }
+
+        private decimal CalculateHMA(int period, IEnumerable<decimal> prices)
+        {
+            if (prices.Count() < period)
+                throw new InvalidOperationException("Недостаточно данных для расчета SMA");
+
+            int halfPeriod = period / 2;
+            int sqrtPeriod = (int)Math.Sqrt(period);
+
+            decimal wmaHalf = CalculateWMA(halfPeriod, prices);
+            decimal wmaFull = CalculateWMA(period, prices);
+
+            List<decimal> diffWma = prices.Skip(prices.Count() - period).Select((p, i) =>
+                (2 * wmaHalf - wmaFull)).ToList();
+
+            return CalculateWMA(sqrtPeriod, diffWma);
+        }
+
+        private decimal CalculateWMA(int period, IEnumerable<decimal> prices )
+        {
+            if (prices.Count() < period)
+                throw new InvalidOperationException("Недостаточно данных для расчета SMA");
+
+            decimal denominator = (decimal)(period * (period + 1) / 2.0);
+            decimal numerator = prices.Skip(prices.Count() - period)
+                .Select((p, i) => p * (i + 1))
+                .Sum();
+
+            return (decimal)(numerator / denominator);
+        }
+
+        private Dictionary<string, decimal> CalculateMovingAverages(IEnumerable<decimal> prices)
+        {
+            int[] periods = { 10, 20, 30, 50, 100, 200 };
+            var results = new Dictionary<string, decimal>();
+
+            foreach (int period in periods)
+            {
+                if (prices.Count() >= period)
+                {
+                    results[$"SMA({period})"] = CalculateSMA(period, prices);
+                    results[$"EMA({period})"] = CalculateEMA(period, prices);
+                }
+            }
+            if (prices.Count() >= 9)
+            {
+                results["HMA(9)"] = CalculateHMA(9, prices);
+            }
+
+            return results;
+        }
         //private decimal CalculateEMA(List<decimal> prices, int period)
         //{
         //    decimal multiplier = 2 / (period + 1);

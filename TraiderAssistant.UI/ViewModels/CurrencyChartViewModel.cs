@@ -21,7 +21,7 @@ namespace TraiderAssistant.UI.ViewModels
     //    Area,
     //    Candle
     //}
-    public class ChartViewModel : INotifyPropertyChanged
+    public class CurrencyChartViewModel : INotifyPropertyChanged
     {
         private readonly BinanceService _binanceService;
         public SeriesCollection Series { get; set; }
@@ -61,7 +61,7 @@ namespace TraiderAssistant.UI.ViewModels
             }
         }
 
-        public ChartViewModel(TechAnalysisViewModel techAnalysisViewModel, CurrencyPair currencyPair)
+        public CurrencyChartViewModel(TechAnalysisViewModel techAnalysisViewModel, CurrencyPair currencyPair)
         {
             CurrencyPair = currencyPair;
             _binanceService = new BinanceService(CurrencyPair);
