@@ -36,6 +36,16 @@ namespace TraiderAssistant.UI.ViewModels
         public ICommand LoadYearDataCommand { get; }
         //public ICommand LoadTechnicalAnalysisCommand { get; }
 
+        //private double _technicalAnalysisIndicator;
+        //public double TechAnalysisIndicator 
+        //{
+        //    get { return _technicalAnalysisIndicator; }
+        //    set
+        //    {
+        //        _technicalAnalysisIndicator = value;
+        //        OnPropertyChanged(nameof(TechAnalysisIndicator));
+        //    }
+        //}
         private TechnicalAnalysisResult _technicalAnalysisResult;
         public TechnicalAnalysisResult TechnicalAnalysisResult
         {
@@ -137,6 +147,7 @@ namespace TraiderAssistant.UI.ViewModels
         {
             var data = await _binanceService.GetChartDataForIndicatorsAsync(endTime);
             TechnicalAnalysisResult = _techAnalysisViewModel.PerformTechnicalAnalysis(data);
+            //technicalAnalysisResult.ind;
         }
 
         private Brush CreateGradientBrush(decimal[] prices)

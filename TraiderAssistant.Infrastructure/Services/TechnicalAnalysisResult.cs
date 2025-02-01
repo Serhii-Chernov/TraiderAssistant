@@ -9,11 +9,15 @@ namespace TraiderAssistant.Infrastructure.Services
     public class TechnicalAnalysisResult
     {
         public double OscillatorIndicator { get; set; }
-        public double MAIndicator { get; set; }
         public string OscillatorResultText { get; set; }
+
+        public double MAIndicator { get; set; }
         public string MAResultText { get; set; }
+
         public double GeneralIndicator { get; set; }
         public string GeneralResultText { get; set; }
+
+
 
         //private Dictionary<string, decimal> osciliators;
         //private Dictionary<string, decimal> movingAverages;
@@ -24,127 +28,52 @@ namespace TraiderAssistant.Infrastructure.Services
             OscillatorIndicator = (double)CalculateOscillatorIndicatorValue(osciliators);
             MAIndicator = (double)CalculateMovingAverageIndicator(movingAverages);
             GeneralIndicator = (OscillatorIndicator + MAIndicator) / 2;
-            UpdateOscillatorResultText();
-            UpdateMAResultText();
-            UpdateGeneralResultText();
+            OscillatorResultText = UpdateResultText(OscillatorIndicator);
+            MAResultText = UpdateResultText(MAIndicator);
+            GeneralResultText = UpdateResultText(GeneralIndicator);
         }
-        private void UpdateGeneralResultText()
+        private string UpdateResultText(double indicatorValue)
         {
-            // Обновляем текст и угол стрелки
-            if (GeneralIndicator < -50)
-                GeneralResultText = "Активно продавать";
-            else if (GeneralIndicator < 0)
-                GeneralResultText = "Продавать";
-            else if (GeneralIndicator == 0)
-                GeneralResultText = "Нейтрально";
-            else if (GeneralIndicator > 50)
-                GeneralResultText = "Активно покупать";
+            if (indicatorValue < -50)
+                return "Active sell";
+            else if (indicatorValue < -15)
+                return "Sell";
+            else if (indicatorValue >-15 && indicatorValue<15)
+                return "Neutral";
+            else if (indicatorValue > 50)
+                return "Active buy";
             else
-                GeneralResultText = "Покупать";
+                return "Buy";
         }
 
-        private void UpdateOscillatorResultText()
-        {
-                // Обновляем текст и угол стрелки
-                if (OscillatorIndicator < -50)
-                    OscillatorResultText = "Активно продавать";
-                else if (OscillatorIndicator < 0)
-                    OscillatorResultText = "Продавать";
-                else if (OscillatorIndicator == 0)
-                    OscillatorResultText = "Нейтрально";
-                else if (OscillatorIndicator > 50)
-                    OscillatorResultText = "Активно покупать";
-                else
-                    OscillatorResultText = "Покупать";
-        }
-
-        private void UpdateMAResultText()
-        {
-            // Обновляем текст и угол стрелки
-            if (MAIndicator < -50)
-                MAResultText = "Активно продавать";
-            else if (MAIndicator < 0)
-                MAResultText = "Продавать";
-            else if (MAIndicator == 0)
-                MAResultText = "Нейтрально";
-            else if (MAIndicator > 50)
-                MAResultText = "Активно покупать";
-            else
-                MAResultText = "Покупать";
-        }
-
+        
 
         private decimal CalculateMovingAverageIndicator(Dictionary<string, decimal> movingAverages)
         {
-            // Получаем значения скользящих средних
-            decimal sma10 = movingAverages["SMA(10)"];
-            decimal ema10 = movingAverages["EMA(10)"];
-            decimal sma20 = movingAverages["SMA(20)"];
-            decimal ema20 = movingAverages["EMA(20)"];
-            decimal sma30 = movingAverages["SMA(30)"];
-            decimal ema30 = movingAverages["EMA(30)"];
-            decimal sma50 = movingAverages["SMA(50)"];
-            decimal ema50 = movingAverages["EMA(50)"];
-            decimal sma100 = movingAverages["SMA(100)"];
-            decimal ema100 = movingAverages["EMA(100)"];
-            decimal sma200 = movingAverages["SMA(200)"];
-            decimal ema200 = movingAverages["EMA(200)"];
-            decimal hma9 = movingAverages["HMA(9)"];
+            if (movingAverages.Count == 0)
+                throw new ArgumentException("Словник скользящих сред пуст.");
 
-            // Функция ограничения значений
+            decimal min = movingAverages.Values.Min();
+            decimal max = movingAverages.Values.Max();
+
             decimal Clamp(decimal value, decimal min, decimal max) => Math.Max(min, Math.Min(max, value));
+            decimal Normalize(decimal value) => Clamp((value - min) / (max - min) * 200 - 100, -100, 100);
 
-            // Нормализация значений (переводим в диапазон [-100, 100] относительно SMA200)
-            decimal reference = sma200;
-            decimal Normalize(decimal value) => Clamp((value - reference) / reference * 100, -100, 100);
+            var weights = new Dictionary<string, decimal>
+            {
+                {"SMA(10)", 0.05m}, {"EMA(10)", 0.1m}, {"SMA(20)", 0.05m}, {"EMA(20)", 0.1m},
+                {"SMA(30)", 0.05m}, {"EMA(30)", 0.1m}, {"SMA(50)", 0.1m}, {"EMA(50)", 0.1m},
+                {"SMA(100)", 0.1m}, {"EMA(100)", 0.1m}, {"SMA(200)", 0.05m}, {"EMA(200)", 0.05m},
+                {"HMA(9)", 0.1m}
+            };
 
-            decimal normalizedSMA10 = Normalize(sma10);
-            decimal normalizedEMA10 = Normalize(ema10);
-            decimal normalizedSMA20 = Normalize(sma20);
-            decimal normalizedEMA20 = Normalize(ema20);
-            decimal normalizedSMA30 = Normalize(sma30);
-            decimal normalizedEMA30 = Normalize(ema30);
-            decimal normalizedSMA50 = Normalize(sma50);
-            decimal normalizedEMA50 = Normalize(ema50);
-            decimal normalizedSMA100 = Normalize(sma100);
-            decimal normalizedEMA100 = Normalize(ema100);
-            decimal normalizedSMA200 = Normalize(sma200);
-            decimal normalizedEMA200 = Normalize(ema200);
-            decimal normalizedHMA9 = Normalize(hma9);
-
-            // Весовые коэффициенты (можно подстроить под стратегию)
-            decimal weightSMA10 = 0.05m;
-            decimal weightEMA10 = 0.1m;
-            decimal weightSMA20 = 0.05m;
-            decimal weightEMA20 = 0.1m;
-            decimal weightSMA30 = 0.05m;
-            decimal weightEMA30 = 0.1m;
-            decimal weightSMA50 = 0.1m;
-            decimal weightEMA50 = 0.1m;
-            decimal weightSMA100 = 0.1m;
-            decimal weightEMA100 = 0.1m;
-            decimal weightSMA200 = 0.05m;
-            decimal weightEMA200 = 0.05m;
-            decimal weightHMA9 = 0.1m;
-
-            // Итоговое значение индикатора (взвешенная сумма)
-            decimal indicatorValue =
-                normalizedSMA10 * weightSMA10 +
-                normalizedEMA10 * weightEMA10 +
-                normalizedSMA20 * weightSMA20 +
-                normalizedEMA20 * weightEMA20 +
-                normalizedSMA30 * weightSMA30 +
-                normalizedEMA30 * weightEMA30 +
-                normalizedSMA50 * weightSMA50 +
-                normalizedEMA50 * weightEMA50 +
-                normalizedSMA100 * weightSMA100 +
-                normalizedEMA100 * weightEMA100 +
-                normalizedSMA200 * weightSMA200 +
-                normalizedEMA200 * weightEMA200 +
-                normalizedHMA9 * weightHMA9;
+            decimal indicatorValue = movingAverages
+                .Where(kvp => weights.ContainsKey(kvp.Key))
+                .Sum(kvp => Normalize(kvp.Value) * weights[kvp.Key]);
 
             return indicatorValue;
         }
+
 
 
         private decimal CalculateOscillatorIndicatorValue(Dictionary<string, decimal> osciliators)
