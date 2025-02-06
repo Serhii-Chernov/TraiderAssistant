@@ -6,7 +6,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
-using TraiderAssistant.Infrastructure.Services;
+using TraiderAssistant.Infrastructure.Services.TechnicalAnalysis;
 
 namespace TraiderAssistant.UI.ViewModels
 {
@@ -61,7 +61,7 @@ namespace TraiderAssistant.UI.ViewModels
         public TechnicalAnalysisResult PerformTechnicalAnalysis(IEnumerable<BinanceSpotKline> data)
         {
             //var result = techAnalysisService.GetTechnicalAnalysis(closePrices, hights, lows, period);
-            return techAnalysisService.GetTechnicalAnalysis(data);
+            return techAnalysisService.PerformTechnicalAnalysis(data);
             //IndicatorValue = techAnalysisService.GetTechnicalAnalysis(closePrices, hights, lows, period);
             //return IndicatorValue;
         }

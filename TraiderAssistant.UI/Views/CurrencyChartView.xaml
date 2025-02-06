@@ -11,7 +11,24 @@
       d:DataContext="{d:DesignInstance viewModels:CurrencyChartViewModel}">
 
     <Grid>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10"  >
+        <!-- Разметка для отображения данных -->
+        <Grid Margin="10,10,10,0" >
+            <Grid.RowDefinitions>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="3*"/>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!--<ToolBar HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10"  >
+            <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}"  Width="70"  />
+            <Button Content="1 day" Command="{Binding LoadDayDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 week" Command="{Binding LoadWeekDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 month" Command="{Binding LoadMonthDataCommand}" Padding="5, 0, 5, 0" />
+            <Button Content="1 year" Command="{Binding LoadYearDataCommand}" Padding="5, 0, 5, 0" />
+        </ToolBar>-->
+            
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5"  >
             <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}"  Width="70"  />
             <Button Content="1 day" Command="{Binding LoadDayDataCommand}" Padding="5, 0, 5, 0" />
             <Button Content="1 week" Command="{Binding LoadWeekDataCommand}" Padding="5, 0, 5, 0" />
@@ -19,28 +36,36 @@
             <Button Content="1 year" Command="{Binding LoadYearDataCommand}" Padding="5, 0, 5, 0" />
         </StackPanel>
         
-        <!-- Разметка для отображения данных -->
-        <Grid Margin="10,40,10,0" >
-            <Grid.RowDefinitions>
-                <RowDefinition Height="3*"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
+        
             <!-- График -->
-            <lvc:CartesianChart Grid.Row="0" Series="{Binding Series}" LegendLocation="Right">
+            
+            <lvc:CartesianChart Grid.Row="1" Series="{Binding Series}" LegendLocation="Right">
                 <lvc:CartesianChart.AxisX>
-                    <lvc:Axis Title="Days" Labels="{Binding Labels}"/>
+                    <lvc:Axis Title="Days" Labels="{Binding Labels}" />
                 </lvc:CartesianChart.AxisX>
                 <lvc:CartesianChart.AxisY>
                     <lvc:Axis Title="Price (USD)" LabelFormatter="{Binding YFormatter}"/>
                 </lvc:CartesianChart.AxisY>
             </lvc:CartesianChart>
 
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="5"  >
+                <Button Content="1 m" Command="{Binding LoadOneMinuteTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="5 m" Command="{Binding LoadFiveMinutesTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="15 m" Command="{Binding LoadFifteenMinutesTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="30 m" Command="{Binding LoadThirtyMinutesTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="1 h" Command="{Binding LoadOneHourTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="2 h" Command="{Binding LoadTwoHoursTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="4 h" Command="{Binding LoadFourHoursTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="1 d" Command="{Binding LoadOneDayTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="1 week" Command="{Binding LoadOneWeekTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+                <Button Content="1 month" Command="{Binding LoadOneMonthTechnicalAnalysisCommand}" Padding="5, 0, 5, 0" />
+            </StackPanel>
+
             <!-- Индикатор технического анализа -->
-            <StackPanel Orientation="Horizontal" Grid.Row="1" >
-                <local:TechAnalysisIndicatorView Margin="30,0" HorizontalAlignment="Left" TechnicalAnalysisName="Oscillators" TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.OscillatorIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.OscillatorResultText}" />
-                <local:TechAnalysisIndicatorView Margin="30,0" HorizontalAlignment="Left" TechnicalAnalysisName="General"  TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.GeneralIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.GeneralResultText}" />
-                <local:TechAnalysisIndicatorView Margin="30,0" HorizontalAlignment="Left" TechnicalAnalysisName="MAs"  TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.MAIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.MAResultText}" />
+            <StackPanel Orientation="Horizontal" Grid.Row="3"  HorizontalAlignment="Center">
+                <local:TechnicalAnalysisIndicatorView Margin="0,0,30,0" TechnicalAnalysisName="Oscillators" TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.OscillatorIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.OscillatorResultText}" />
+                <local:TechnicalAnalysisIndicatorView Margin="30,0" TechnicalAnalysisName="General"  TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.GeneralIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.GeneralResultText}" />
+                <local:TechnicalAnalysisIndicatorView Margin="30,0" TechnicalAnalysisName="MAs"  TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.MAIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.MAResultText}" />
 
             </StackPanel>
         </Grid>

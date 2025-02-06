@@ -18,16 +18,16 @@ namespace TraiderAssistant.UI.Views
     /// <summary>
     /// Interaction logic for TechAnalysisIndicatorView.xaml
     /// </summary>
-    public partial class TechAnalysisIndicatorView : UserControl
+    public partial class TechnicalAnalysisIndicatorView : UserControl
     {
         private Line arrow;
 
         public static readonly DependencyProperty TechnicalAnalysisIndicatorProperty =
-            DependencyProperty.Register("TechnicalAnalysisIndicator", typeof(double), typeof(TechAnalysisIndicatorView), new PropertyMetadata(0.0, OnTechnicalAnalysisIndicatorChanged));
+            DependencyProperty.Register("TechnicalAnalysisIndicator", typeof(double), typeof(TechnicalAnalysisIndicatorView), new PropertyMetadata(0.0, OnTechnicalAnalysisIndicatorChanged));
         public static readonly DependencyProperty TechnicalAnalysisTextProperty =
-            DependencyProperty.Register("TechnicalAnalysisText", typeof(string), typeof(TechAnalysisIndicatorView), new PropertyMetadata(string.Empty));
+            DependencyProperty.Register("TechnicalAnalysisText", typeof(string), typeof(TechnicalAnalysisIndicatorView), new PropertyMetadata(string.Empty));
         public static readonly DependencyProperty TechnicalAnalysisNameProperty =
-             DependencyProperty.Register("TechnicalAnalysisName", typeof(string), typeof(TechAnalysisIndicatorView), new PropertyMetadata(string.Empty));
+             DependencyProperty.Register("TechnicalAnalysisName", typeof(string), typeof(TechnicalAnalysisIndicatorView), new PropertyMetadata(string.Empty));
 
 
 
@@ -51,13 +51,13 @@ namespace TraiderAssistant.UI.Views
 
         private static void OnTechnicalAnalysisIndicatorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var view = d as TechAnalysisIndicatorView;
+            var view = d as TechnicalAnalysisIndicatorView;
             view?.UpdateCanvas();
         }
        
 
 
-        public TechAnalysisIndicatorView()
+        public TechnicalAnalysisIndicatorView()
         {
             InitializeComponent();
             //var a  = TechnicalAnalysisIndicator;

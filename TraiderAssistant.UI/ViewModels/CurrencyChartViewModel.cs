@@ -1,4 +1,5 @@
-﻿using GalaSoft.MvvmLight.CommandWpf;
+﻿using Binance.Net.Enums;
+using GalaSoft.MvvmLight.CommandWpf;
 using LiveCharts;
 using LiveCharts.Defaults;
 using LiveCharts.Wpf;
@@ -12,6 +13,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Media;
 using TraiderAssistant.Infrastructure.Services;
+using TraiderAssistant.Infrastructure.Services.TechnicalAnalysis;
 
 namespace TraiderAssistant.UI.ViewModels
 {
@@ -34,18 +36,19 @@ namespace TraiderAssistant.UI.ViewModels
         public ICommand LoadWeekDataCommand { get; }
         public ICommand LoadMonthDataCommand { get; }
         public ICommand LoadYearDataCommand { get; }
-        //public ICommand LoadTechnicalAnalysisCommand { get; }
 
-        //private double _technicalAnalysisIndicator;
-        //public double TechAnalysisIndicator 
-        //{
-        //    get { return _technicalAnalysisIndicator; }
-        //    set
-        //    {
-        //        _technicalAnalysisIndicator = value;
-        //        OnPropertyChanged(nameof(TechAnalysisIndicator));
-        //    }
-        //}
+        public ICommand LoadOneMinuteTechnicalAnalysisCommand { get; } 
+        public ICommand LoadFiveMinutesTechnicalAnalysisCommand { get; }
+        public ICommand LoadFifteenMinutesTechnicalAnalysisCommand { get; }
+        public ICommand LoadThirtyMinutesTechnicalAnalysisCommand { get; }
+        public ICommand LoadOneHourTechnicalAnalysisCommand { get; }
+        public ICommand LoadTwoHoursTechnicalAnalysisCommand { get; }
+        public ICommand LoadFourHoursTechnicalAnalysisCommand { get; }
+        public ICommand LoadOneDayTechnicalAnalysisCommand { get; }
+        public ICommand LoadOneWeekTechnicalAnalysisCommand { get; }
+        public ICommand LoadOneMonthTechnicalAnalysisCommand { get; }
+
+
         private TechnicalAnalysisResult _technicalAnalysisResult;
         public TechnicalAnalysisResult TechnicalAnalysisResult
         {
@@ -82,6 +85,18 @@ namespace TraiderAssistant.UI.ViewModels
             LoadMonthDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddMonths(-1), DateTime.UtcNow));
             LoadYearDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddYears(-1), DateTime.UtcNow));
 
+            LoadOneMinuteTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneMinute));
+            LoadFiveMinutesTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.FiveMinutes));
+            LoadFifteenMinutesTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.FifteenMinutes));
+            LoadThirtyMinutesTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.ThirtyMinutes));
+            LoadOneHourTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneHour));
+            LoadTwoHoursTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.TwoHour));
+            LoadFourHoursTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.FourHour));
+            LoadOneDayTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneDay));
+            LoadOneWeekTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneWeek));
+            LoadOneMonthTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneMonth));
+
+
             ChartTypes = new List<string> { "Line", "Area", "Candle" };
             SelectedChartType = "Line"; // Установите начальный стиль графика
 
@@ -93,7 +108,7 @@ namespace TraiderAssistant.UI.ViewModels
         private async Task InitializeAsync()
         {
             await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow);
-            await InitializeTechnicalAnalysis(DateTime.UtcNow.AddMinutes(-250), DateTime.UtcNow);
+            await InitializeTechnicalAnalysis(DateTime.UtcNow);
         }
 
         private async Task LoadDataAsync(DateTime startTime, DateTime endTime)
@@ -143,10 +158,11 @@ namespace TraiderAssistant.UI.ViewModels
             OnPropertyChanged(nameof(Labels));
         }
 
-        private async Task InitializeTechnicalAnalysis(DateTime startTime, DateTime endTime)
+        private async Task InitializeTechnicalAnalysis(DateTime endTime, KlineInterval klineInterval = KlineInterval.OneMinute)
         {
             var data = await _binanceService.GetChartDataForIndicatorsAsync(endTime);
             TechnicalAnalysisResult = _techAnalysisViewModel.PerformTechnicalAnalysis(data);
+            var s=2;
             //technicalAnalysisResult.ind;
         }
 
