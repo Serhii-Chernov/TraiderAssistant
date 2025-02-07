@@ -16,7 +16,8 @@ namespace TraiderAssistant.Infrastructure.Services
     public enum CurrencyPair
     {
         BTCUSDT,
-        NOTUSDT
+        NOTUSDT,
+        ETHUSDT
     }
     public class BinanceService
     {

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -18,16 +19,16 @@ namespace TraiderAssistant.Infrastructure.Services.TechnicalAnalysis
         public double GeneralIndicator { get; set; }
         public string GeneralResultText { get; set; }
 
-        public List<TechnicalAnalysisNameValueActionStruct> osciliators;
-        public List<TechnicalAnalysisNameValueActionStruct> movingAverages;
+        public List<TechnicalAnalysisNameValueActionStruct> Oscillators { get; set; }
+        public List<TechnicalAnalysisNameValueActionStruct> MovingAverages { get; set; }
 
-        public TechnicalAnalysisResult(List<TechnicalAnalysisNameValueActionStruct> osciliators, List<TechnicalAnalysisNameValueActionStruct> movingAverages, double oscillatorIndicator, double maIndicator, double generalIndicator)
+        public TechnicalAnalysisResult(List<TechnicalAnalysisNameValueActionStruct> oscillators, List<TechnicalAnalysisNameValueActionStruct> movingAverages, double oscillatorIndicator, double maIndicator, double generalIndicator)
         {
-            this.osciliators = osciliators;
-            this.movingAverages = movingAverages;
-            this.OscillatorIndicator = oscillatorIndicator;
-            this.MAIndicator = maIndicator;
-            this.GeneralIndicator = generalIndicator;
+            Oscillators = oscillators;
+            MovingAverages = movingAverages;
+            OscillatorIndicator = oscillatorIndicator;
+            MAIndicator = maIndicator;
+            GeneralIndicator = generalIndicator;
             OscillatorResultText = UpdateResultText(OscillatorIndicator);
             MAResultText = UpdateResultText(MAIndicator);
             GeneralResultText = UpdateResultText(GeneralIndicator);

@@ -1,6 +1,7 @@
 ﻿using Binance.Net.Objects.Models.Spot;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -11,29 +12,21 @@ namespace TraiderAssistant.Infrastructure.Services.TechnicalAnalysis
 {
     public class TechnicalAnalysisService
     {
-        private IEnumerable<decimal> closePrices;
-        //private IEnumerable<decimal> highs;
-        //private IEnumerable<decimal> lows;
-        //private int period;
-
+        //private IEnumerable<decimal> closePrices;
 
         public TechnicalAnalysisResult PerformTechnicalAnalysis(IEnumerable<BinanceSpotKline> data)
         {
-            closePrices = data.Select(k => k.ClosePrice).ToList();
+            IEnumerable<decimal> closePrices = data.Select(k => k.ClosePrice).ToList();
 
             var osciliators = PerformOscillators(data);
-            var MAs = CalculateMovingAverages(closePrices);
+            var MAs = PerformMovingAverages(closePrices);
 
-            ;
             var oscillatorIndicator = (double)CalculateOscillatorIndicatorValue(osciliators);
             var maIndicator = (double)CalculateMovingAverageIndicator(MAs);
             var generalIndicator = (oscillatorIndicator + maIndicator) / 2;
 
             TechnicalAnalysisResult technicalAnalysisResult = new TechnicalAnalysisResult(osciliators, MAs, oscillatorIndicator, maIndicator, generalIndicator);
-            //technicalAnalysisResult.OscillatorIndicator = (double)CalculateOscillatorIndicatorValue(osciliators);
-            //technicalAnalysisResult.MAIndicator = (double)CalculateMovingAverageIndicator(MAs);
-            //technicalAnalysisResult.GeneralIndicator = (technicalAnalysisResult.OscillatorIndicator + technicalAnalysisResult.MAIndicator) / 2;
-
+            
             return technicalAnalysisResult;
         }
 
@@ -158,9 +151,9 @@ namespace TraiderAssistant.Infrastructure.Services.TechnicalAnalysis
         /// <param name="period">Период EMA.</param>
         /// <param name="data">Опциональный список данных (по умолчанию используется closePrices).</param>
         /// <returns>Значение EMA.</returns>
-        private decimal CalculateEMA(int period, IEnumerable<decimal> data = null)
+        private decimal CalculateEMA(int period, IEnumerable<decimal> data)
         {
-            data ??= closePrices; // Используем закрытые цены, если не передан другой источник
+            //data ??= closePrices; // Используем закрытые цены, если не передан другой источник
 
             if (data.Count() < period)
                 throw new InvalidOperationException("Недостаточно данных для расчёта EMA.");
@@ -215,7 +208,7 @@ namespace TraiderAssistant.Infrastructure.Services.TechnicalAnalysis
             return numerator / denominator;
         }
 
-        private List<TechnicalAnalysisNameValueActionStruct> CalculateMovingAverages(IEnumerable<decimal> prices)
+        private List<TechnicalAnalysisNameValueActionStruct> PerformMovingAverages(IEnumerable<decimal> prices)
         {
             int[] periods = { 10, 20, 30, 50, 100, 200 };
             List<TechnicalAnalysisNameValueActionStruct> MAsStructs = new List<TechnicalAnalysisNameValueActionStruct>();

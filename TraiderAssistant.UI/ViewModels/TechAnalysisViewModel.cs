@@ -25,16 +25,6 @@ namespace TraiderAssistant.UI.ViewModels
             }
         }
 
-        //private string resultText;
-        //public string ResultText
-        //{
-        //    get => resultText;
-        //    private set
-        //    {
-        //        resultText = value;
-        //        OnPropertyChanged();
-        //    }
-        //}
         TechnicalAnalysisService techAnalysisService;
 
         public TechAnalysisViewModel()
@@ -43,27 +33,9 @@ namespace TraiderAssistant.UI.ViewModels
             IndicatorValue = 0; // Нейтрально
         }
 
-        //private void UpdateIndicator()
-        //{
-        //    // Обновляем текст и угол стрелки
-        //    if (IndicatorValue < -50)
-        //        ResultText = "Активно продавать";
-        //    else if (IndicatorValue < 0)
-        //        ResultText = "Продавать";
-        //    else if (IndicatorValue == 0)
-        //        ResultText = "Нейтрально";
-        //    else if (IndicatorValue > 50)
-        //        ResultText = "Активно покупать";
-        //    else
-        //        ResultText = "Покупать";
-        //}
-
         public TechnicalAnalysisResult PerformTechnicalAnalysis(IEnumerable<BinanceSpotKline> data)
         {
-            //var result = techAnalysisService.GetTechnicalAnalysis(closePrices, hights, lows, period);
             return techAnalysisService.PerformTechnicalAnalysis(data);
-            //IndicatorValue = techAnalysisService.GetTechnicalAnalysis(closePrices, hights, lows, period);
-            //return IndicatorValue;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

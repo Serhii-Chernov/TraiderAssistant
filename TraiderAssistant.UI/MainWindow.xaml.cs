@@ -32,5 +32,10 @@ namespace TraiderAssistant.UI
         {
             MainContent.Navigate(new CurrencyChartView(CurrencyPair.NOTUSDT));
         }
+
+        private void EthereumButton_Click(object sender, RoutedEventArgs e)
+        {
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.ETHUSDT));
+        }
     }
 }

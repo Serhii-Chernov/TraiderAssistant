@@ -17,18 +17,12 @@ using TraiderAssistant.Infrastructure.Services.TechnicalAnalysis;
 
 namespace TraiderAssistant.UI.ViewModels
 {
-    //public enum ChartViewType
-    //{
-    //    Line,
-    //    Area,
-    //    Candle
-    //}
     public class CurrencyChartViewModel : INotifyPropertyChanged
     {
         private readonly BinanceService _binanceService;
         public SeriesCollection Series { get; set; }
         public ObservableCollection<string> Labels { get; set; }
-        public Func<double, string> YFormatter { get; set; }//убрать в конкретный VM
+        public Func<double, string> YFormatter { get; set; }
         private readonly TechAnalysisViewModel _techAnalysisViewModel;
         public CurrencyPair CurrencyPair { get; set; }
 
@@ -162,7 +156,7 @@ namespace TraiderAssistant.UI.ViewModels
         {
             var data = await _binanceService.GetChartDataForIndicatorsAsync(endTime);
             TechnicalAnalysisResult = _techAnalysisViewModel.PerformTechnicalAnalysis(data);
-            var s=2;
+            
             //technicalAnalysisResult.ind;
         }
 
