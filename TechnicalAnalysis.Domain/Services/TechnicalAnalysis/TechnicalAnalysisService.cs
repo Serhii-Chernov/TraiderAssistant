@@ -1,4 +1,5 @@
 ﻿using Binance.Net.Objects.Models.Spot;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -6,18 +7,15 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TraiderAssistant.Infrastructure.Oscillators;
+using System.Transactions;
+using TechnicalAnalysis.Shared;
 
-namespace TraiderAssistant.Infrastructure.Services.TechnicalAnalysis
+namespace TechnicalAnalysis.Domain
 {
     public class TechnicalAnalysisService
     {
-        //private IEnumerable<decimal> closePrices;
-
         public TechnicalAnalysisResult PerformTechnicalAnalysis(IEnumerable<BinanceSpotKline> data)
         {
-            Console.WriteLine("PerformTechnicalAnalysis");
-
             IEnumerable<decimal> closePrices = data.Select(k => k.ClosePrice).ToList();
 
             var osciliators = PerformOscillators(data);
@@ -52,25 +50,23 @@ namespace TraiderAssistant.Infrastructure.Services.TechnicalAnalysis
                 new StochasticRSIOscillator()
             };
 
-            //var osciliatorResults = new Dictionary<string, decimal>();
-
             TechnicalAnalysisNameValueActionStruct TechAnalysisStruct;
             foreach (var oscillator in oscillatorsList)
             {
-                //osciliatorResults.Add($"{oscillator.Name}", oscillator.Calculate(data));
                 try
                 {
-
-                    TechAnalysisStruct = new TechnicalAnalysisNameValueActionStruct(oscillator.Name, oscillator.Calculate(data));
+                    TechAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
+                    TechAnalysisStruct.Name = oscillator.Name;
+                    TechAnalysisStruct.Value = oscillator.Calculate(data);
+                    TechAnalysisStruct.NormalizedValue = NormalizeOscillatorValue(TechAnalysisStruct.Value, oscillator.Name);
+                    TechAnalysisStruct.Action = GetOscillatorAction(TechAnalysisStruct.Value);
                     osciliatorsStructs.Add(TechAnalysisStruct);
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.ToString());
                 }
-
             }
-
             return osciliatorsStructs;
         }
 
@@ -278,110 +274,74 @@ namespace TraiderAssistant.Infrastructure.Services.TechnicalAnalysis
                 if (prices.Count() >= period)
                 {
 
-                    string name = $"SMA({period})";
-                    decimal value = CalculateSMA(period, prices);
-                    MAStuct = new TechnicalAnalysisNameValueActionStruct(name, value, currentPrice);
+                    //string name = $"SMA({period})";
+                    //decimal value = CalculateSMA(period, prices);
+                    MAStuct = new TechnicalAnalysisNameValueActionStruct();
+                    MAStuct.Name = $"SMA({period})";
+                    MAStuct.Value = CalculateSMA(period, prices);
+                    MAStuct.Action = GetMovingAverageAction(MAStuct.Value, currentPrice);
                     MAsStructs.Add(MAStuct);
 
-                    MAStuct = new TechnicalAnalysisNameValueActionStruct(name, value, currentPrice);
+                    MAStuct = new TechnicalAnalysisNameValueActionStruct();
                     MAStuct.Name = $"EMA({period})";
                     MAStuct.Value = CalculateEMA(period, prices);
+                    MAStuct.Action = GetMovingAverageAction(MAStuct.Value, currentPrice);
                     MAsStructs.Add(MAStuct);
-                    //results[$"SMA({period})"] = CalculateSMA(period, prices);
-                    //results[$"EMA({period})"] = CalculateEMA(period, prices);
                 }
             }
             if (prices.Count() >= 9)
             {
-                //results["HMA(9)"] = CalculateHMA(9, prices);
-                string name = $"HMA(9)";
-                decimal value = CalculateHMA(9, prices);
-                MAStuct = new TechnicalAnalysisNameValueActionStruct(name, value, currentPrice);
+                MAStuct = new TechnicalAnalysisNameValueActionStruct();
+                MAStuct.Name = $"HMA(9)";
+                MAStuct.Value = CalculateHMA(9, prices);
+                MAStuct.Action = GetMovingAverageAction(MAStuct.Value, currentPrice);
                 MAsStructs.Add(MAStuct);
             }
             return MAsStructs;
         }
-    }
-    public class TechnicalAnalysisNameValueActionStruct
-    {
-        public string Name { get; set; }
-        public decimal Value { get; set; }
-        private decimal normalizedValue;
-        public decimal NormalizedValue
+        // Метод для определения действия на основе скользящих средних
+        private string GetMovingAverageAction(decimal movingAverageValue, decimal currentPrice)
         {
-            get
-            {
-                return normalizedValue;
-            }
-            private set
-            {
-                normalizedValue = value;
-                Action = GetOscillatorAction(value);
-            }
-        }
-        public string Action { get; set; }
+            const decimal tolerance = 0.001m;
 
-        //List<string> oscillators = new List<string> { "RSI", "StochasticK", "CCI", "ADX", "AO", "Momentum", "MACD", "UltimateOscillator", "WilliamsR", "BullBearPower", "StochasticRSI" };
-
-        public TechnicalAnalysisNameValueActionStruct(string MAName, decimal value, decimal currentPrice)
-        {
-            Name = MAName;
-            Value = value;
-            Action = GetMovingAverageAction(value, currentPrice);
-        }
-
-        public TechnicalAnalysisNameValueActionStruct(string oscillatorName, decimal value)
-        {
-            Name = oscillatorName;
-            Value = value;
-            NormalizedValue = NormalizeValue(Value, Name);
-
-        }
-
-        private decimal NormalizeValue(decimal value, string oscillatorName)
-        {
-            // Функция ограничения значений
-            decimal Clamp(decimal val, decimal min, decimal max) => Math.Max(min, Math.Min(max, val));
-
-            // Нормализация в зависимости от типа осциллятора
-            return oscillatorName switch
-            {
-                "RSI" => value * 2 - 100,                    // Приводим к диапазону [-100, 100]
-                "StochasticK" => value * 2 - 100,            // Аналогично RSI
-                "CCI" => Clamp(value, -200, 200),            // Ограничиваем CCI
-                "ADX" => value * 2 - 100,                    // Аналогично RSI
-                "AO" => Clamp(value, -100, 100),             // AO уже в [-100, 100]
-                "Momentum" => Clamp(value, -100, 100),       // Momentum уже в [-100, 100]
-                "MACD" => value,                             // MACD оставляем как есть
-                "UltimateOscillator" => value * 2 - 100,     // Ultimate Oscillator к [-100, 100]
-                "Williams%R" => -Clamp(value, -100, 0),       // Williams %R инвертируем: [-100, 0] → [0, 100]
-                "BullBearPower" => Clamp(value, -100, 100),  // Ограничиваем диапазон
-                "StochasticRSI" => value * 2 - 100,          // Аналогично StochasticK
-                //_ => Clamp(value, -100, 100)
-                _ => throw new ArgumentException("Unknown oscillator name", nameof(oscillatorName))
-            };
-        }
-
-        public string GetMovingAverageAction(decimal movingAverage, decimal currentPrice)
-        {
-            const decimal tolerance = 0.001m; // Допустимая погрешность для нейтрального сигнала
-
-            if (currentPrice > movingAverage * (1 + tolerance))
-                return TradeAction.TradeAction.Buy;
-            else if (currentPrice < movingAverage * (1 - tolerance))
-                return TradeAction.TradeAction.Sell;
+            if (currentPrice > movingAverageValue * (1 + tolerance))
+                return TradeAction.Buy;
+            else if (currentPrice < movingAverageValue * (1 - tolerance))
+                return TradeAction.Sell;
             else
-                return TradeAction.TradeAction.Neutral;
+                return TradeAction.Neutral;
         }
 
+        // Метод для определения действия на основе осцилляторов
         private string GetOscillatorAction(decimal indicatorValue)
         {
             if (indicatorValue < -15)
-                return TradeAction.TradeAction.Sell;
-            else if (indicatorValue > -15 && indicatorValue < 15)
-                return TradeAction.TradeAction.Neutral;
+                return TradeAction.Sell;
+            else if (indicatorValue > 15)
+                return TradeAction.Buy;
             else
-                return TradeAction.TradeAction.Buy;
+                return TradeAction.Neutral;
+        }
+        private decimal NormalizeOscillatorValue(decimal value, string oscillatorName)
+        {
+            decimal Clamp(decimal val, decimal min, decimal max) => Math.Max(min, Math.Min(max, val));
+
+            return oscillatorName switch
+            {
+                "RSI" => value * 2 - 100,
+                "StochasticK" => value * 2 - 100,
+                "CCI" => Clamp(value, -200, 200),
+                "ADX" => value * 2 - 100,
+                "AO" => Clamp(value, -100, 100),
+                "Momentum" => Clamp(value, -100, 100),
+                "MACD" => value,
+                "UltimateOscillator" => value * 2 - 100,
+                "Williams%R" => -Clamp(value, -100, 0),
+                "BullBearPower" => Clamp(value, -100, 100),
+                "StochasticRSI" => value * 2 - 100,
+                _ => throw new ArgumentException("Unknown oscillator name", nameof(oscillatorName))
+            };
         }
     }
+    
 }

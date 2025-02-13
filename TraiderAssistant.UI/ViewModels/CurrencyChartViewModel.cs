@@ -12,18 +12,18 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Media;
-using TraiderAssistant.Infrastructure.Services;
-using TraiderAssistant.Infrastructure.Services.TechnicalAnalysis;
+using TechnicalAnalysis.Shared;
 
 namespace TraiderAssistant.UI.ViewModels
 {
     public class CurrencyChartViewModel : INotifyPropertyChanged
     {
-        private readonly BinanceService _binanceService;
+        //private readonly BinanceService _binanceService;
         public SeriesCollection Series { get; set; }
         public ObservableCollection<string> Labels { get; set; }
         public Func<double, string> YFormatter { get; set; }
-        private readonly TechAnalysisViewModel _techAnalysisViewModel;
+        // private readonly TechAnalysisViewModel _techAnalysisViewModel;
+        TechnicalAnalysisClient _technicalAnalysisClient;
         public CurrencyPair CurrencyPair { get; set; }
 
         public ICommand LoadDayDataCommand { get; }
@@ -68,12 +68,12 @@ namespace TraiderAssistant.UI.ViewModels
             }
         }
 
-        public CurrencyChartViewModel(TechAnalysisViewModel techAnalysisViewModel, CurrencyPair currencyPair)
+        public CurrencyChartViewModel(TechnicalAnalysisClient technicalAnalysisClient, CurrencyPair currencyPair)
         {
             CurrencyPair = currencyPair;
-            _binanceService = new BinanceService(CurrencyPair);
+            //_binanceService = new BinanceService(CurrencyPair);
 
-            _techAnalysisViewModel = techAnalysisViewModel;
+            _technicalAnalysisClient = technicalAnalysisClient;
             LoadDayDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow));
             LoadWeekDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow));
             LoadMonthDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddMonths(-1), DateTime.UtcNow));
@@ -101,26 +101,31 @@ namespace TraiderAssistant.UI.ViewModels
 
         private async Task InitializeAsync()
         {
-            await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow);
+            //await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow);
             await InitializeTechnicalAnalysis(DateTime.UtcNow);
         }
 
         private async Task LoadDataAsync(DateTime startTime, DateTime endTime)
         {
             //Period = endTime.Subtract(startTime).Days;
-            var data = await _binanceService.GetChartDataAsync(startTime, endTime);
+            //var data = await _binanceService.GetChartDataAsync(startTime, endTime);
+            var data = await _technicalAnalysisClient.GetChartDataAsync(CurrencyPair, startTime, endTime);
             var prices = data.Select(k => k.ClosePrice).ToArray();
             var dates = data.Select(k => k.CloseTime.ToString("dd/MM/yyyy")).ToArray();
-            
 
+            StringBuilder title = new StringBuilder();
+            var roundedValue = Math.Round(prices.Last(), 5);
+            title.Append($"{CurrencyPair.ToString()}  {roundedValue.ToString()}");
+            //title.Append();
             Series = new SeriesCollection();
 
             switch (SelectedChartType)
             {
                 case "Line":
+                    
                     Series.Add(new LineSeries
                     {
-                        Title = "Notcoin",
+                        Title = title.ToString(),
                         Values = new ChartValues<decimal>(prices),
                         PointGeometry = null, // Убираем круги
                         PointGeometrySize = 0 // Устанавливаем размер кругов в 0
@@ -129,7 +134,8 @@ namespace TraiderAssistant.UI.ViewModels
                 case "Area":
                     Series.Add(new LineSeries
                     {
-                        Title = "Notcoin",
+                        
+                        Title = title.ToString(),
                         Values = new ChartValues<decimal>(prices),
                         Fill = CreateGradientBrush(prices),
                         StrokeThickness = 1,
@@ -141,7 +147,7 @@ namespace TraiderAssistant.UI.ViewModels
                     var candleData = data.Select(k => new OhlcPoint((double)k.OpenPrice, (double)k.HighPrice, (double)k.LowPrice, (double)k.ClosePrice)).ToArray();
                     Series.Add(new CandleSeries
                     {
-                        Title = "Notcoin",
+                        Title = title.ToString(),
                         Values = new ChartValues<OhlcPoint>(candleData)
                     });
                     break;
@@ -154,8 +160,8 @@ namespace TraiderAssistant.UI.ViewModels
 
         private async Task InitializeTechnicalAnalysis(DateTime endTime, KlineInterval klineInterval = KlineInterval.OneMinute)
         {
-            var data = await _binanceService.GetChartDataForIndicatorsAsync(endTime);
-            TechnicalAnalysisResult = _techAnalysisViewModel.PerformTechnicalAnalysis(data);
+            //var data = await _binanceService.GetChartDataForIndicatorsAsync(endTime);
+            TechnicalAnalysisResult = await _technicalAnalysisClient.GetTechnicalAnalysisAsync(CurrencyPair,endTime, klineInterval);
             
             //technicalAnalysisResult.ind;
         }

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TraiderAssistant.Infrastructure.Oscillators
+namespace TechnicalAnalysis.Domain
 {
     internal class UltimateOscillator : IOscillator
     {

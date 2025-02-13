@@ -42,7 +42,7 @@
 
                 <!-- График -->
 
-                <lvc:CartesianChart Grid.Row="1" Series="{Binding Series}" LegendLocation="Right">
+                <lvc:CartesianChart Grid.Row="1" Series="{Binding Series}" LegendLocation="Top">
                     <lvc:CartesianChart.AxisX>
                         <lvc:Axis Title="Days" Labels="{Binding Labels}" />
                     </lvc:CartesianChart.AxisX>

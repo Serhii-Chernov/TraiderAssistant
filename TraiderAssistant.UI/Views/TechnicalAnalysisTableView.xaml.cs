@@ -14,7 +14,9 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using TraiderAssistant.Infrastructure.Services.TechnicalAnalysis;
+using TechnicalAnalysis.Shared;
+
+//using TraiderAssistant.Infrastructure.Services.TechnicalAnalysis;
 using TraiderAssistant.UI.ViewModels;
 
 namespace TraiderAssistant.UI.Views
@@ -22,9 +24,6 @@ namespace TraiderAssistant.UI.Views
 
     public partial class TechnicalAnalysisTableView : UserControl
     {
-        
-
-
         public static readonly DependencyProperty TechnicalAnalysisTableDataProperty =
             DependencyProperty.Register(
             nameof(TechnicalAnalysisTableData),

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net6.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
+    <Nullable>disable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Binance.Net" Version="10.17.0" />
     <PackageReference Include="LiveCharts.Wpf.NetCore3" Version="0.9.8" />
     <PackageReference Include="Microsoft.ML" Version="4.0.0" />
     <PackageReference Include="Microsoft.ML.TimeSeries" Version="4.0.0" />
@@ -23,8 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\TraiderAssistant.Application\TraiderAssistant.Application.csproj" />
-    <ProjectReference Include="..\TraiderAssistant.Infrastructure\TraiderAssistant.Infrastructure.csproj" />
+    <ProjectReference Include="..\TechnicalAnalysis.Shared\TechnicalAnalysis.Shared.csproj" />
   </ItemGroup>
 
 </Project>

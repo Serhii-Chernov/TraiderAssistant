@@ -3,48 +3,54 @@ using Binance.Net.Clients;
 using Binance.Net.Enums;
 using Binance.Net.Objects.Models.Spot;
 using CryptoExchange.Net.Authentication;
-using Microsoft.ML;
-using Microsoft.ML.Transforms.TimeSeries;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xceed.Wpf.Toolkit;
+using TechnicalAnalysis.Shared;
 
-namespace TraiderAssistant.Infrastructure.Services
+namespace TechnicalAnalysis.Domain
 {
-    public enum CurrencyPair
-    {
-        BTCUSDT,
-        NOTUSDT,
-        ETHUSDT
-    }
+    
     public class BinanceService
     {
         private readonly BinanceRestClient _client;
-       // private readonly CurrencyPair currency;
 
-        public BinanceService()//CurrencyPair currencyPair
+        public BinanceService()
         {
             _client = new BinanceRestClient();
-            //this.currency = currencyPair;
         }
 
-        public async Task<IEnumerable<BinanceSpotKline>> GetChartDataAsync(CurrencyPair currencyPair, DateTime startTime, DateTime endTime)
+        public async Task<List<KlineData>> GetChartDataAsync(CurrencyPair currencyPair, DateTime startTime, DateTime endTime)
         {
             var interval = GetKlineInterval(startTime, endTime);
 
             var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime, limit: 1000);
             if (result.Success)
             {
-                return result.Data.Cast<BinanceSpotKline>();
+                List<KlineData> klineDataList = new List<KlineData>();
+                KlineData klineData;
+                foreach (var item in result.Data)
+                {
+                    klineData = new KlineData();
+                    klineData.OpenTime = item.OpenTime;
+                    klineData.CloseTime = item.CloseTime;
+
+                    klineData.OpenPrice = item.OpenPrice;
+                    klineData.ClosePrice = item.ClosePrice;
+
+                    klineData.LowPrice = item.LowPrice;
+                    klineData.HighPrice = item.HighPrice;
+                    klineDataList.Add(klineData);
+                    //item.CloseTime = item.OpenTime.AddMilliseconds((long)item.Interval);
+                }
+                return klineDataList;
             }
             else
             {
                 throw new Exception(result.Error.Message);
             }
         }
-
         private KlineInterval GetKlineInterval(DateTime startTime, DateTime endTime)
         {
             TimeSpan duration = endTime - startTime;

@@ -8,8 +8,10 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using TraiderAssistant.Infrastructure.Services;
+//using TraiderAssistant.Infrastructure.Services;
 using TraiderAssistant.UI.Views;
+//using TraiderAssistant.Infrastructure;
+using TechnicalAnalysis.Shared;
 
 namespace TraiderAssistant.UI
 {
@@ -18,9 +20,13 @@ namespace TraiderAssistant.UI
     /// </summary>
     public partial class MainWindow : Window
     {
+        //private ILogger _logger;
         public MainWindow()
         {
             InitializeComponent();
+            //SerilogLoggerFactory.Configure();
+            //_logger = new SerilogLoggerFactory().CreateLogger<MainWindow>();
+            //_logger.LogInfo("MainWindow initialized");
         }
         private void BitcoinButton_Click(object sender, RoutedEventArgs e)
         {

@@ -12,7 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using TraiderAssistant.Infrastructure.Services;
+using TechnicalAnalysis.Shared;
 using TraiderAssistant.UI.ViewModels;
 
 namespace TraiderAssistant.UI.Views
@@ -24,8 +24,9 @@ namespace TraiderAssistant.UI.Views
     {
         public CurrencyChartView(CurrencyPair currencyPair)
         {
-            var techAnalysisViewModel = new TechAnalysisViewModel();
-            DataContext = new CurrencyChartViewModel(techAnalysisViewModel, currencyPair);
+            //var techAnalysisViewModel = new TechAnalysisViewModel();
+            TechnicalAnalysisClient technicalAnalysisClient = new TechnicalAnalysisClient();
+            DataContext = new CurrencyChartViewModel(technicalAnalysisClient, currencyPair);
             InitializeComponent();
         }
     }
