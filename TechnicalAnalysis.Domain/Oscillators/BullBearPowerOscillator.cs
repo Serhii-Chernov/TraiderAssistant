@@ -4,14 +4,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
     internal class BullBearPowerOscillator : IOscillator
     {
         public string Name { get; set; } = "BullBearPower";
-        public decimal Calculate(IEnumerable<BinanceSpotKline> data)
+        public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
+            TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
             int period = 13; // Используем стандартный период EMA
 
             var closePrices = data.Select(x => x.ClosePrice).ToList();
@@ -27,9 +29,17 @@ namespace TechnicalAnalysis.Domain
 
             // Bear Power = Минимальная цена - EMA
             decimal bearPower = lows.Last() - ema;
+            technicalAnalysisStruct.Name = Name;
+            technicalAnalysisStruct.Value = (bullPower + bearPower) / 2;
+            technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
 
             // Итоговое значение как среднее между Bull и Bear Power
-            return (bullPower + bearPower) / 2;
+            return technicalAnalysisStruct;
+        }
+
+        public string GetAction(decimal value, decimal? extraValue = null)
+        {
+            return value > 0 ? TradeAction.Buy : TradeAction.Sell;
         }
 
         private decimal CalculateEMA(IEnumerable<decimal> data, int period)

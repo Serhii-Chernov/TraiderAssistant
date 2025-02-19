@@ -4,34 +4,45 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
+    //
     internal class WilliamsROscillator : IOscillator
     {
         public string Name { get; set; } = "Williams%R";
-        public decimal Calculate(IEnumerable<BinanceSpotKline> data)
+
+        public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
-            int period = 14; // Период для расчёта Williams %R
+            TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
+            technicalAnalysisStruct.Name = Name;
+            int period = 14;
             var closePrices = data.Select(k => k.ClosePrice).ToList();
             var highs = data.Select(k => k.HighPrice).ToList();
             var lows = data.Select(k => k.LowPrice).ToList();
 
-            // Индексы для поиска максимума и минимума за период
-            int startIndex = closePrices.Count() - period;
+            if (closePrices.Count < period)
+                throw new ArgumentException("Not enough data to calculate.");
 
-            // Находим максимальное значение High и минимальное значение Low за период
-            decimal highestHigh = highs.Skip(startIndex).Take(period).Max();
-            decimal lowestLow = lows.Skip(startIndex).Take(period).Min();
-
-            // Цена закрытия текущего дня
+            decimal highestHigh = highs.TakeLast(period).Max();
+            decimal lowestLow = lows.TakeLast(period).Min();
             decimal currentClose = closePrices.Last();
 
-            // Рассчитываем Williams %R
-            decimal williamsR = ((highestHigh - currentClose) / (highestHigh - lowestLow)) * -100;
+            decimal denominator = highestHigh - lowestLow;
+            if (denominator == 0)
+                technicalAnalysisStruct.Value=-50; // Средний уровень (0 и -100 - крайние значения)
+            else
+                technicalAnalysisStruct.Value = ((highestHigh - currentClose) / denominator) * -100;
+            technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
 
-            return williamsR;
-            
+            return technicalAnalysisStruct;
+        }
+
+        public string GetAction(decimal value, decimal? extraValue = null)
+        {
+            return value < -20 ? TradeAction.Sell : (value > -80 ? TradeAction.Buy : TradeAction.Neutral);
         }
     }
+
 }

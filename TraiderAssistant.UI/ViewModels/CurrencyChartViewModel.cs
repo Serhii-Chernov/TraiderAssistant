@@ -18,30 +18,14 @@ namespace TraiderAssistant.UI.ViewModels
 {
     public class CurrencyChartViewModel : INotifyPropertyChanged
     {
-        //private readonly BinanceService _binanceService;
         public SeriesCollection Series { get; set; }
         public ObservableCollection<string> Labels { get; set; }
         public Func<double, string> YFormatter { get; set; }
-        // private readonly TechAnalysisViewModel _techAnalysisViewModel;
         TechnicalAnalysisClient _technicalAnalysisClient;
         public CurrencyPair CurrencyPair { get; set; }
-
-        public ICommand LoadDayDataCommand { get; }
-        public ICommand LoadWeekDataCommand { get; }
-        public ICommand LoadMonthDataCommand { get; }
-        public ICommand LoadYearDataCommand { get; }
-
-        public ICommand LoadOneMinuteTechnicalAnalysisCommand { get; } 
-        public ICommand LoadFiveMinutesTechnicalAnalysisCommand { get; }
-        public ICommand LoadFifteenMinutesTechnicalAnalysisCommand { get; }
-        public ICommand LoadThirtyMinutesTechnicalAnalysisCommand { get; }
-        public ICommand LoadOneHourTechnicalAnalysisCommand { get; }
-        public ICommand LoadTwoHoursTechnicalAnalysisCommand { get; }
-        public ICommand LoadFourHoursTechnicalAnalysisCommand { get; }
-        public ICommand LoadOneDayTechnicalAnalysisCommand { get; }
-        public ICommand LoadOneWeekTechnicalAnalysisCommand { get; }
-        public ICommand LoadOneMonthTechnicalAnalysisCommand { get; }
-
+        
+        public ICommand SetChartEndTimeCommand { get; }
+        public ICommand SetTechnicalAnalysisKlineIntervalCommand { get; }
 
         private TechnicalAnalysisResult _technicalAnalysisResult;
         public TechnicalAnalysisResult TechnicalAnalysisResult
@@ -68,31 +52,41 @@ namespace TraiderAssistant.UI.ViewModels
             }
         }
 
+        private DateTime _selectedChartEndTime;
+        public DateTime SelectedChartEndTime
+        {
+            get => _selectedChartEndTime;
+            set
+            {
+                _selectedChartEndTime = value;
+                OnPropertyChanged(nameof(SelectedChartEndTime));
+                LoadDataAsync(SelectedChartEndTime, DateTime.UtcNow).ConfigureAwait(false); // Вызов LoadDataAsync при изменении периода графика
+            }
+        }
+
+        private KlineInterval _technicalAnalysisKlineInterval;
+        public KlineInterval TechnicalAnalysisKlineInterval
+        {
+            get => _technicalAnalysisKlineInterval;
+            set
+            {
+                _technicalAnalysisKlineInterval = value;
+                OnPropertyChanged(nameof(TechnicalAnalysisKlineInterval));
+                InitializeTechnicalAnalysis(DateTime.UtcNow, TechnicalAnalysisKlineInterval).ConfigureAwait(false); // Вызов InitializeTechnicalAnalysis при изменении интервала
+            }
+        }
+
         public CurrencyChartViewModel(TechnicalAnalysisClient technicalAnalysisClient, CurrencyPair currencyPair)
         {
             CurrencyPair = currencyPair;
-            //_binanceService = new BinanceService(CurrencyPair);
 
             _technicalAnalysisClient = technicalAnalysisClient;
-            LoadDayDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow));
-            LoadWeekDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddDays(-7), DateTime.UtcNow));
-            LoadMonthDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddMonths(-1), DateTime.UtcNow));
-            LoadYearDataCommand = new RelayCommand(async () => await LoadDataAsync(DateTime.UtcNow.AddYears(-1), DateTime.UtcNow));
-
-            LoadOneMinuteTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneMinute));
-            LoadFiveMinutesTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.FiveMinutes));
-            LoadFifteenMinutesTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.FifteenMinutes));
-            LoadThirtyMinutesTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.ThirtyMinutes));
-            LoadOneHourTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneHour));
-            LoadTwoHoursTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.TwoHour));
-            LoadFourHoursTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.FourHour));
-            LoadOneDayTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneDay));
-            LoadOneWeekTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneWeek));
-            LoadOneMonthTechnicalAnalysisCommand = new RelayCommand(async () => await InitializeTechnicalAnalysis(DateTime.UtcNow, KlineInterval.OneMonth));
-
+            SetChartEndTimeCommand = new RelayCommand<int>(days => SelectedChartEndTime = DateTime.UtcNow.AddDays(-days));
+            SetTechnicalAnalysisKlineIntervalCommand = new RelayCommand<KlineInterval>(interval => TechnicalAnalysisKlineInterval = interval);
 
             ChartTypes = new List<string> { "Line", "Area", "Candle" };
             SelectedChartType = "Line"; // Установите начальный стиль графика
+            SelectedChartEndTime = DateTime.UtcNow.AddDays(-1); // Установите начальный период графика
 
             YFormatter = value => value.ToString("N5"); // Округление до целых чисел
 
@@ -107,8 +101,6 @@ namespace TraiderAssistant.UI.ViewModels
 
         private async Task LoadDataAsync(DateTime startTime, DateTime endTime)
         {
-            //Period = endTime.Subtract(startTime).Days;
-            //var data = await _binanceService.GetChartDataAsync(startTime, endTime);
             var data = await _technicalAnalysisClient.GetChartDataAsync(CurrencyPair, startTime, endTime);
             var prices = data.Select(k => k.ClosePrice).ToArray();
             var dates = data.Select(k => k.CloseTime.ToString("dd/MM/yyyy")).ToArray();
@@ -116,13 +108,12 @@ namespace TraiderAssistant.UI.ViewModels
             StringBuilder title = new StringBuilder();
             var roundedValue = Math.Round(prices.Last(), 5);
             title.Append($"{CurrencyPair.ToString()}  {roundedValue.ToString()}");
-            //title.Append();
             Series = new SeriesCollection();
 
             switch (SelectedChartType)
             {
                 case "Line":
-                    
+
                     Series.Add(new LineSeries
                     {
                         Title = title.ToString(),
@@ -134,7 +125,7 @@ namespace TraiderAssistant.UI.ViewModels
                 case "Area":
                     Series.Add(new LineSeries
                     {
-                        
+
                         Title = title.ToString(),
                         Values = new ChartValues<decimal>(prices),
                         Fill = CreateGradientBrush(prices),
@@ -160,10 +151,7 @@ namespace TraiderAssistant.UI.ViewModels
 
         private async Task InitializeTechnicalAnalysis(DateTime endTime, KlineInterval klineInterval = KlineInterval.OneMinute)
         {
-            //var data = await _binanceService.GetChartDataForIndicatorsAsync(endTime);
-            TechnicalAnalysisResult = await _technicalAnalysisClient.GetTechnicalAnalysisAsync(CurrencyPair,endTime, klineInterval);
-            
-            //technicalAnalysisResult.ind;
+            TechnicalAnalysisResult = await _technicalAnalysisClient.GetTechnicalAnalysisAsync(CurrencyPair, endTime, klineInterval);
         }
 
         private Brush CreateGradientBrush(decimal[] prices)

@@ -4,14 +4,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
     internal class UltimateOscillator : IOscillator
     {
         public string Name { get; set; } = "UltimateOscillator";
-        public decimal Calculate(IEnumerable<BinanceSpotKline> data)
+        public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
+            TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
+            technicalAnalysisStruct.Name = Name;
             int period1 = 7;
             int period2 = 14;
             int period3 = 28;
@@ -53,9 +56,15 @@ namespace TechnicalAnalysis.Domain
             decimal avgTR3 = trList.TakeLast(period3).Sum();
 
             // Вычисляем Ultimate Oscillator
-            decimal uo = 100 * ((4 * (avgBP1 / avgTR1) + 2 * (avgBP2 / avgTR2) + 1 * (avgBP3 / avgTR3)) / (4 + 2 + 1));
+            technicalAnalysisStruct.Value = 100 * ((4 * (avgBP1 / avgTR1) + 2 * (avgBP2 / avgTR2) + 1 * (avgBP3 / avgTR3)) / (4 + 2 + 1));
+            technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
 
-            return uo;
+            return technicalAnalysisStruct;
+        }
+
+        public string GetAction(decimal value, decimal? extraValue = null)
+        {
+           return value > 70 ? TradeAction.Sell : (value < 30 ? TradeAction.Buy : TradeAction.Neutral);
         }
     }
 }

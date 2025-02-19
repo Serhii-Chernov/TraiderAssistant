@@ -29,5 +29,6 @@ namespace TraiderAssistant.UI.Views
             DataContext = new CurrencyChartViewModel(technicalAnalysisClient, currencyPair);
             InitializeComponent();
         }
+
     }
 }

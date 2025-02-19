@@ -20,14 +20,17 @@ namespace TraiderAssistant.UI
     {
         private static readonly HttpClient httpClient = new HttpClient();
         private const string analysisApiUrl = "https://technicalanalysis.azurewebsites.net/Analysis/Calculate";
+        private const string analysisLocalUrl = "https://localhost:5001/Analysis/Calculate";//7010
         private const string chartApiUrl = "https://technicalanalysis.azurewebsites.net/Chart/GetChartData";
+        private const string chartLocalUrl = "https://localhost:5001/Chart/GetChartData";//7010
 
         public async Task<TechnicalAnalysisResult> GetTechnicalAnalysisAsync(CurrencyPair currencyPair, DateTime endTime, KlineInterval klineInterval)
         {
             try
             {
                 string endTimeStr = endTime.ToString("yyyy-MM-ddTHH:mm:ss");
-                string stringRequest = $"{analysisApiUrl}?currencyPair={(int)currencyPair}&endTime={endTimeStr}&klineInterval={(int)klineInterval}";
+                //string stringRequest = $"{analysisApiUrl}?currencyPair={(int)currencyPair}&endTime={endTimeStr}&klineInterval={(int)klineInterval}";
+                string stringRequest = $"{analysisLocalUrl}?currencyPair={(int)currencyPair}&endTime={endTimeStr}&klineInterval={(int)klineInterval}";
                 
                 var response = await httpClient.GetAsync(stringRequest);
                 response.EnsureSuccessStatusCode(); // Выбросит исключение, если статус ответа не успешный
@@ -50,7 +53,8 @@ namespace TraiderAssistant.UI
             {
                 string startTimeStr = startTime.ToString("yyyy-MM-ddTHH:mm:ss");
                 string endTimeStr = endTime.ToString("yyyy-MM-ddTHH:mm:ss");
-                string stringRequest = $"{chartApiUrl}?currencyPair={(int)currencyPair}&startTime={startTimeStr}&endTime={endTimeStr}";
+                //string stringRequest = $"{chartApiUrl}?currencyPair={(int)currencyPair}&startTime={startTimeStr}&endTime={endTimeStr}";
+                string stringRequest = $"{chartLocalUrl}?currencyPair={(int)currencyPair}&startTime={startTimeStr}&endTime={endTimeStr}";
 
                 var response = await httpClient.GetAsync(stringRequest);
                 response.EnsureSuccessStatusCode();

@@ -4,27 +4,45 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
+    //
     public class StochasticKOscillator : IOscillator
     {
-        public string Name
+        public string Name { get; set; } = "StochasticK";
+
+        public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
-            get; set;
-        } = "StochasticK";
-        public decimal Calculate(IEnumerable<BinanceSpotKline> data)
-        {
+            TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
+            technicalAnalysisStruct.Name = Name;
             int period = 14;
             var closePrices = data.Select(k => k.ClosePrice).ToList();
             var highs = data.Select(k => k.HighPrice).ToList();
             var lows = data.Select(k => k.LowPrice).ToList();
-            int startIndex = closePrices.Count() - period;
-            decimal highestHigh = highs.Skip(startIndex).Take(period).Max();
-            decimal lowestLow = lows.Skip(startIndex).Take(period).Min();
+
+            if (closePrices.Count < period)
+                throw new ArgumentException("Not enough data to calculate.");
+
+            decimal highestHigh = highs.TakeLast(period).Max();
+            decimal lowestLow = lows.TakeLast(period).Min();
             decimal currentClose = closePrices.Last();
 
-            return ((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100;
+            decimal denominator = highestHigh - lowestLow;
+            if (denominator == 0)
+                technicalAnalysisStruct.Value = 50; // Когда High == Low, стохастик нейтрален.
+            else
+                technicalAnalysisStruct.Value = ((currentClose - lowestLow) / denominator) * 100;
+
+            technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
+            return technicalAnalysisStruct;
+        }
+
+        public string GetAction(decimal value, decimal? extraValue = null)
+        {
+            return value > 80 ? TradeAction.Sell : (value < 20 ? TradeAction.Buy : TradeAction.Neutral);
         }
     }
+
 }

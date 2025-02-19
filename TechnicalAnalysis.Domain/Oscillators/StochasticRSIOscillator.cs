@@ -4,69 +4,74 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
+    //
     internal class StochasticRSIOscillator : IOscillator
     {
         public string Name { get; set; } = "StochasticRSI";
 
-        public decimal Calculate(IEnumerable<BinanceSpotKline> data)
+        public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
-            var closePrices = data.Select(k => k.ClosePrice).ToList();
+            TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
+            technicalAnalysisStruct.Name = Name;
             int period = 14;
-            // Проверяем, достаточно ли данных для расчета
-            if (closePrices.Count() < period)
-                throw new InvalidOperationException("Недостаточно данных для расчета Stochastic RSI");
+            var closePrices = data.Select(k => k.ClosePrice).ToList();
 
-            List<decimal> rsiValues = new List<decimal>();
+            if (closePrices.Count < period)
+                throw new InvalidOperationException("Not enough data to calculate Stochastic RSI");
 
-            // Рассчитываем RSI для каждого окна
-            for (int i = period; i <= closePrices.Count(); i++)
-            {
-                // Берем последние "period" значений для расчета RSI
-                var window = closePrices.Skip(i - period).Take(period).ToList();
-                rsiValues.Add(CalculateRSI(window)); // Теперь вызываем CalculateRSI для каждого окна
-            }
+            // Вычисляем RSI
+            var rsiValues = closePrices.Select((_, i) =>
+                i >= period ? CalculateRSI(closePrices.Skip(i - period).Take(period).ToList(), period) : 0).Skip(period).ToList();
 
-            // Находим максимальное и минимальное значение RSI в пределах последнего периода
             decimal highestRSI = rsiValues.TakeLast(period).Max();
             decimal lowestRSI = rsiValues.TakeLast(period).Min();
             decimal currentRSI = rsiValues.Last();
 
-            // Защита от деления на ноль
             decimal denominator = highestRSI - lowestRSI;
             if (denominator == 0)
-                return 0; // Если диапазон RSI = 0, Stochastic RSI тоже 0
+                technicalAnalysisStruct.Value = 50; // Средний уровень
+            else
+                technicalAnalysisStruct.Value = ((currentRSI - lowestRSI) / denominator) * 100;
 
-            return ((currentRSI - lowestRSI) / denominator) * 100;
+            technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
+
+            return technicalAnalysisStruct;
+        }
+
+        public string GetAction(decimal value, decimal? extraValue = null)
+        {
+            return value > 80 ? TradeAction.Sell : (value < 20 ? TradeAction.Buy : TradeAction.Neutral);
         }
 
         private decimal CalculateRSI(List<decimal> prices, int period = 14)
         {
-            
-            if (prices.Count < period)
-                throw new InvalidOperationException("Недостаточно данных для расчета RSI");
+            decimal sumGain = 0;
+            decimal sumLoss = 0;
 
-            var gains = new List<decimal>();
-            var losses = new List<decimal>();
-
-            for (int i = 1; i < period; i++)
+            for (int i = 1; i < prices.Count; i++)
             {
-                var change = prices[i] - prices[i - 1];
-                if (change > 0)
-                    gains.Add(change);
+                decimal delta = prices[i] - prices[i - 1];
+                if (delta > 0)
+                    sumGain += delta;
                 else
-                    losses.Add(Math.Abs(change));
+                    sumLoss -= delta;
             }
 
-            var avgGain = gains.Any() ? gains.Average() : 0;
-            var avgLoss = losses.Any() ? losses.Average() : 0;
+            decimal avgGain = sumGain / period;
+            decimal avgLoss = sumLoss / period;
 
-            if (avgLoss == 0) return 100; // Если потери равны нулю, RSI = 100
-            var rs = avgGain / avgLoss;
+            if (avgLoss == 0)
+                return 100;
+            if (avgGain == 0)
+                return 0;
 
-            return 100 - (100 / (1 + rs));
+            decimal rs = avgGain / avgLoss;
+            return 100 - 100 / (1 + rs);
         }
     }
+
 }

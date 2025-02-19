@@ -5,13 +5,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
     public interface IOscillator
     {
         public string Name { get; set; }
-        //internal decimal Calculate(IEnumerable<decimal> prices, int period);
-        public decimal Calculate(IEnumerable<BinanceSpotKline> data);
+        public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data);
+        public string GetAction(decimal value, decimal? extraValue = null);
     }
 }

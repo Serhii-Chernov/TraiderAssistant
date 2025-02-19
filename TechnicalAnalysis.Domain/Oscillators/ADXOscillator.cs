@@ -4,17 +4,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
     public class ADXOscillator : IOscillator
     {
-        public string Name
+        public string Name{get; set;} = "ADX";
+        public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
-            get; set;
-        } = "ADX";
-        public decimal Calculate(IEnumerable<BinanceSpotKline> data)
-        {
+            TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
             int period = 20;
             var closePrices = data.Select(k => k.ClosePrice).ToList();
             var highs = data.Select(k => k.HighPrice).ToList();
@@ -66,8 +65,16 @@ namespace TechnicalAnalysis.Domain
                     adx = ((adx * (period - 1)) + dx) / period;
                 }
             }
+            technicalAnalysisStruct.Name = Name;
+            technicalAnalysisStruct.Value = adx;
+            technicalAnalysisStruct.Action = GetAction(adx);
 
-            return adx;
+            return technicalAnalysisStruct;
+        }
+
+        public string GetAction(decimal value, decimal? extraValue = null)
+        {
+            return value > 25 ? TradeAction.Buy : TradeAction.Neutral;
         }
     }
 }

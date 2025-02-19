@@ -11,5 +11,8 @@ namespace TechnicalAnalysis.Shared
         BTCUSDT,
         NOTUSDT,
         ETHUSDT
+        //    BTCUSDT,
+        //NOTUSDT,
+        //ETHUSDT
     }
 }

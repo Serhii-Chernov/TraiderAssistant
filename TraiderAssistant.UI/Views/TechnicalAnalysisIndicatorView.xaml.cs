@@ -9,6 +9,7 @@ using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
@@ -29,8 +30,6 @@ namespace TraiderAssistant.UI.Views
         public static readonly DependencyProperty TechnicalAnalysisNameProperty =
              DependencyProperty.Register("TechnicalAnalysisName", typeof(string), typeof(TechnicalAnalysisIndicatorView), new PropertyMetadata(string.Empty));
 
-
-
         public double TechnicalAnalysisIndicator
         {
             get { return (double)GetValue(TechnicalAnalysisIndicatorProperty); }
@@ -47,27 +46,38 @@ namespace TraiderAssistant.UI.Views
             set { SetValue(TechnicalAnalysisNameProperty, value); }
         }
 
-       
-
         private static void OnTechnicalAnalysisIndicatorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var view = d as TechnicalAnalysisIndicatorView;
             view?.UpdateCanvas();
         }
-       
-
 
         public TechnicalAnalysisIndicatorView()
         {
             InitializeComponent();
-            //var a  = TechnicalAnalysisIndicator;
-            //var b = TechnicalAnalysisText;
+            this.SizeChanged += TechnicalAnalysisIndicatorView_SizeChanged;
+        }
+
+
+        private void TechnicalAnalysisIndicatorView_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateFontSize();
+        }
+
+        private void UpdateFontSize()
+        {
+            double newFontSize = 20; // Чем больше ширина, тем больше шрифт
+            //double newFontSize = Math.Max(22, ActualWidth / 30); // Чем больше ширина, тем больше шрифт
+            TechnicalAnalysisNameTextBox.FontSize = newFontSize;
+            TechnicalAnalysisTextTextBox.FontSize = newFontSize;
         }
 
         private void UpdateCanvas()
         {
             var canvas = AnalysisCanvas;
             canvas.Children.Clear();
+
+            if (canvas.ActualWidth == 0 || canvas.ActualHeight == 0) return;
 
             DrawSectors(canvas);
             DrawArrow(canvas);
@@ -77,10 +87,14 @@ namespace TraiderAssistant.UI.Views
         {
 
             // Центр круга
-            double centerX = canvas.Width * 0.5;
-            double centerY = canvas.Height * 0.9;
-            double outerRadius = canvas.Height * 0.75; // Радиус внешней дуги
-            double innerRadius = canvas.Height * 0.65; // Радиус внутренней дуги
+            //double centerX = canvas.Width * 0.5;
+            //double centerY = canvas.Height * 0.9;
+            //double outerRadius = canvas.Height * 0.75; // Радиус внешней дуги
+            //double innerRadius = canvas.Height * 0.65; // Радиус внутренней дуги
+            double centerX = canvas.ActualWidth * 0.5;
+            double centerY = canvas.ActualHeight * 0.9;
+            double outerRadius = canvas.ActualHeight * 0.75;
+            double innerRadius = canvas.ActualHeight * 0.65;
 
 
             Brush[] sectorColors = { Brushes.Green, Brushes.LightGreen, Brushes.LightGray, Brushes.Orange, Brushes.Red };
@@ -168,9 +182,13 @@ namespace TraiderAssistant.UI.Views
         private void DrawArrow(Canvas canvas)
         {
 
-            double centerX = canvas.Width * 0.5;
-            double centerY = canvas.Height * 0.9;
-            double radius = canvas.Height * 0.8;
+            //double centerX = canvas.Width * 0.5;
+            //double centerY = canvas.Height * 0.9;
+            //double radius = canvas.Height * 0.8;
+
+            double centerX = canvas.ActualWidth * 0.5;
+            double centerY = canvas.ActualHeight * 0.9;
+            double radius = canvas.ActualHeight * 0.8;
 
             // Обновляем угол поворота стрелки в зависимости от значения индикатора
             double angle = IndicatorToAngle(TechnicalAnalysisIndicator);
@@ -189,17 +207,19 @@ namespace TraiderAssistant.UI.Views
                 X2 = pointX,
                 Y2 = pointY,
                 Stroke = Brushes.Black,
-                StrokeThickness = 2
+                StrokeThickness = 2,
             };
-
 
             canvas.Children.Add(arrow);
         }
 
+
+
         double DegreesToRadians(double degrees)
         {
-            return degrees * Math.PI / 180.0;
+            return degrees == 0 ? 0 : degrees * Math.PI / 180.0;
         }
+
 
         /// <summary>
         /// Преобразует значение индикатора в угол поворота стрелки.
@@ -209,7 +229,7 @@ namespace TraiderAssistant.UI.Views
         /// <returns></returns>
         double IndicatorToAngle(double indicator)
         {
-            double angle = 90 / 100.0 * indicator;
+            double angle = (90 / 100.0) * indicator;
             return angle;
         }
 

@@ -50,8 +50,9 @@ namespace TraiderAssistant.UI.Views
         public TechnicalAnalysisTableView()
         {
             InitializeComponent();
+           
         }
-
+        
         private static void TechnicalAnalysisDataChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var view = d as TechnicalAnalysisTableView;
@@ -82,7 +83,7 @@ namespace TraiderAssistant.UI.Views
                 TableGrid.RowDefinitions.Add(new RowDefinition());
 
                 AddCellToGrid(item.Name, 0, row);
-                var roundedValue = Math.Round(item.Value, 5);
+                var roundedValue = Math.Round(item.Value, 2);
                 AddCellToGrid(roundedValue.ToString(), 1, row);
                 AddCellToGrid(item.Action, 2, row);
 
@@ -96,6 +97,7 @@ namespace TraiderAssistant.UI.Views
             {
                 Text = text,
                 Margin = new Thickness(20),
+                //FontSize = isHeader ? 20:15,
                 FontWeight = isHeader ? FontWeights.Bold : FontWeights.Normal,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center

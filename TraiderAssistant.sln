@@ -5,10 +5,6 @@ VisualStudioVersion = 17.8.34330.188
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TraiderAssistant.UI", "TraiderAssistant.UI\TraiderAssistant.UI.csproj", "{7965119B-C995-41ED-9842-067CE2BE4538}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TraiderAssistant.Application", "TraiderAssistant.Application\TraiderAssistant.Application.csproj", "{19F92623-2341-43DF-9D12-586C01546766}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TraiderAssistant.Domain", "TraiderAssistant.Domain\TraiderAssistant.Domain.csproj", "{42221D71-EAA2-4EC9-80EA-A7C125464BEA}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TraiderAssistant.Infrastructure", "TraiderAssistant.Infrastructure\TraiderAssistant.Infrastructure.csproj", "{7499EB31-CCB5-4E53-B060-4DE7B53EB3D9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TechnicalAnalysis.WebApi", "TechnicalAnalysisWebApi\TechnicalAnalysis.WebApi.csproj", "{DFDDF70F-DA56-4214-8E11-B16888BFAA37}"
@@ -27,14 +23,6 @@ Global
 		{7965119B-C995-41ED-9842-067CE2BE4538}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7965119B-C995-41ED-9842-067CE2BE4538}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7965119B-C995-41ED-9842-067CE2BE4538}.Release|Any CPU.Build.0 = Release|Any CPU
-		{19F92623-2341-43DF-9D12-586C01546766}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{19F92623-2341-43DF-9D12-586C01546766}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{19F92623-2341-43DF-9D12-586C01546766}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{19F92623-2341-43DF-9D12-586C01546766}.Release|Any CPU.Build.0 = Release|Any CPU
-		{42221D71-EAA2-4EC9-80EA-A7C125464BEA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{42221D71-EAA2-4EC9-80EA-A7C125464BEA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{42221D71-EAA2-4EC9-80EA-A7C125464BEA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{42221D71-EAA2-4EC9-80EA-A7C125464BEA}.Release|Any CPU.Build.0 = Release|Any CPU
 		{7499EB31-CCB5-4E53-B060-4DE7B53EB3D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{7499EB31-CCB5-4E53-B060-4DE7B53EB3D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7499EB31-CCB5-4E53-B060-4DE7B53EB3D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
