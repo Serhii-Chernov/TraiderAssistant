@@ -8,7 +8,6 @@ using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
-    //
     internal class WilliamsROscillator : IOscillator
     {
         public string Name { get; set; } = "Williams%R";
@@ -23,7 +22,7 @@ namespace TechnicalAnalysis.Domain
             var lows = data.Select(k => k.LowPrice).ToList();
 
             if (closePrices.Count < period)
-                throw new ArgumentException("Not enough data to calculate.");
+                throw new ArgumentException("Not enough data to calculate Williams%R.");
 
             decimal highestHigh = highs.TakeLast(period).Max();
             decimal lowestLow = lows.TakeLast(period).Min();
@@ -31,7 +30,7 @@ namespace TechnicalAnalysis.Domain
 
             decimal denominator = highestHigh - lowestLow;
             if (denominator == 0)
-                technicalAnalysisStruct.Value=-50; // Средний уровень (0 и -100 - крайние значения)
+                technicalAnalysisStruct.Value=-50; // Average level (0 and -100 are extreme values)
             else
                 technicalAnalysisStruct.Value = ((highestHigh - currentClose) / denominator) * -100;
             technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);

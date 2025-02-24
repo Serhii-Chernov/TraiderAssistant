@@ -14,7 +14,7 @@
                      TextAlignment="Center" BorderThickness="2" IsReadOnly="True" />
             </Viewbox>
 
-            <Border  BorderBrush="LightGray" BorderThickness="2" CornerRadius="5"><!--BorderBrush="Black"-->
+            <Border  BorderBrush="LightGray" BorderThickness="2" CornerRadius="5">
                 <Canvas x:Name="AnalysisCanvas" Width="400" Height="200" Background="White" />
             </Border>
 

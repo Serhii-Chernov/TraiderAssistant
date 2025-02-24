@@ -7,11 +7,9 @@
              mc:Ignorable="d"
              d:DesignHeight="150" d:DesignWidth="200">
     <StackPanel>
-        <TextBox Text="{Binding TechnicalAnalysisTableName, RelativeSource={RelativeSource AncestorType=UserControl}}" TextAlignment="Center"/>
+        <TextBox Text="{Binding TechnicalAnalysisTableName, RelativeSource={RelativeSource AncestorType=UserControl}}" TextAlignment="Center" IsReadOnly="True"/>
         <Border BorderBrush="Black" BorderThickness="1" CornerRadius="5">
-            <Grid x:Name="TableGrid" HorizontalAlignment="Stretch">
-                <!-- Здесь можно добавить содержимое таблицы -->
-            </Grid>
+            <Grid x:Name="TableGrid" HorizontalAlignment="Stretch"/>
         </Border>
     </StackPanel>
 </UserControl>

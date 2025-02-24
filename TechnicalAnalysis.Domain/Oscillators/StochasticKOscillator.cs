@@ -23,7 +23,7 @@ namespace TechnicalAnalysis.Domain
             var lows = data.Select(k => k.LowPrice).ToList();
 
             if (closePrices.Count < period)
-                throw new ArgumentException("Not enough data to calculate.");
+                throw new ArgumentException("Not enough data to calculate StochasticK.");
 
             decimal highestHigh = highs.TakeLast(period).Max();
             decimal lowestLow = lows.TakeLast(period).Min();
@@ -31,7 +31,7 @@ namespace TechnicalAnalysis.Domain
 
             decimal denominator = highestHigh - lowestLow;
             if (denominator == 0)
-                technicalAnalysisStruct.Value = 50; // Когда High == Low, стохастик нейтрален.
+                technicalAnalysisStruct.Value = 50; // When High == Low, stochastic is neutral.
             else
                 technicalAnalysisStruct.Value = ((currentClose - lowestLow) / denominator) * 100;
 

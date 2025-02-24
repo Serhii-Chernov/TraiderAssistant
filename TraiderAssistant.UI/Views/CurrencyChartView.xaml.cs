@@ -24,11 +24,9 @@ namespace TraiderAssistant.UI.Views
     {
         public CurrencyChartView(CurrencyPair currencyPair)
         {
-            //var techAnalysisViewModel = new TechAnalysisViewModel();
             TechnicalAnalysisClient technicalAnalysisClient = new TechnicalAnalysisClient();
             DataContext = new CurrencyChartViewModel(technicalAnalysisClient, currencyPair);
             InitializeComponent();
         }
-
     }
 }

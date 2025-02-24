@@ -85,20 +85,18 @@ namespace TechnicalAnalysis.Domain.Services.TechnicalAnalysis
         }
 
         /// <summary>
-        /// Рассчитывает экспоненциальную скользящую среднюю (EMA).
+        /// Calculates an exponential moving average (EMA).
         /// </summary>
-        /// <param name="period">Период EMA.</param>
-        /// <param name="data">Опциональный список данных (по умолчанию используется closePrices).</param>
-        /// <returns>Значение EMA.</returns>
+        /// <param name="period">EMA period.</param>
+        /// <param name="data">Optional data list (default is closePrices).</param>
+        /// <returns>EMA value.</returns>
         private decimal CalculateEMA(int period, IEnumerable<decimal> data)
         {
-            //data ??= closePrices; // Используем закрытые цены, если не передан другой источник
-
             if (data.Count() < period)
-                throw new InvalidOperationException("Недостаточно данных для расчёта EMA.");
+                throw new InvalidOperationException("Not enough data to calculate EMA.");
 
             decimal multiplier = 2m / (period + 1);
-            decimal ema = data.Take(period).Average(); // Начальное значение — SMA
+            decimal ema = data.Take(period).Average(); // Initial value - SMA
 
             foreach (var price in data.Skip(period))
             {
@@ -108,50 +106,33 @@ namespace TechnicalAnalysis.Domain.Services.TechnicalAnalysis
             return ema;
         }
 
-        // Метод для вычисления простого скользящего среднего
+        // Method for calculating simple moving average
         private decimal CalculateSMA(int period, IEnumerable<decimal> prices)
         {
             if (prices.Count() < period)
-                throw new InvalidOperationException("Недостаточно данных для расчета SMA");
+                throw new InvalidOperationException("Not enough data to calculate SMA");
 
             return prices.TakeLast(period).Average();
         }
 
-        //private decimal CalculateHMA(int period, IEnumerable<decimal> prices)
-        //{
-        //    if (prices.Count() < period)
-        //        throw new InvalidOperationException("Недостаточно данных для расчета SMA");
-
-        //    int halfPeriod = period / 2;
-        //    int sqrtPeriod = (int)Math.Sqrt(period);
-
-        //    decimal wmaHalf = CalculateWMA(halfPeriod, prices);
-        //    decimal wmaFull = CalculateWMA(period, prices);
-
-        //    List<decimal> diffWma = prices.Skip(prices.Count() - period).Select((p, i) =>
-        //        2 * wmaHalf - wmaFull).ToList();
-
-        //    return CalculateWMA(sqrtPeriod, diffWma);
-        //}
-
         private decimal CalculateHMA(int period, IEnumerable<decimal> prices)
         {
             if (prices.Count() < period)
-                throw new InvalidOperationException("Недостаточно данных для расчета HMA");
+                throw new InvalidOperationException("Not enough data to calculate HMA");
 
             int halfPeriod = period / 2;
             int sqrtPeriod = (int)Math.Sqrt(period);
 
-            // 1️⃣ Вычисляем WMA(halfPeriod) и WMA(period)
+            // Calculate WMA(halfPeriod) and WMA(period)
             var wmaHalf = CalculateWMA(halfPeriod, prices);
             var wmaFull = CalculateWMA(period, prices);
 
-            // 2️⃣ Создаем список разностей: 2 * WMA(halfPeriod) - WMA(period)
+            // Create a list of differences: 2 * WMA(halfPeriod) - WMA(period)
             var weightedDiff = prices.TakeLast(period)
                 .Select(p => 2 * wmaHalf - wmaFull)
                 .ToList();
 
-            // 3️⃣ Вычисляем WMA(sqrtPeriod) на основе разности
+            // Calculate WMA(sqrtPeriod) based on the difference
             return CalculateWMA(sqrtPeriod, weightedDiff);
         }
 
@@ -159,12 +140,7 @@ namespace TechnicalAnalysis.Domain.Services.TechnicalAnalysis
         private decimal CalculateWMA(int period, IEnumerable<decimal> prices)
         {
             if (prices.Count() < period)
-                throw new InvalidOperationException("Недостаточно данных для расчета SMA");
-
-            //decimal denominator = (decimal)(period * (period + 1) / 2.0);
-            //decimal numerator = prices.Skip(prices.Count() - period)
-            //    .Select((p, i) => p * (i + 1))
-            //    .Sum();
+                throw new InvalidOperationException("Not enough data to calculate SMA");
 
             decimal denominator = period * (period + 1) / 2m;
             decimal numerator = prices.TakeLast(period)
@@ -177,16 +153,8 @@ namespace TechnicalAnalysis.Domain.Services.TechnicalAnalysis
         
         private string GetMovingAverageAction(decimal movingAverageValue, decimal currentPrice)
         {
-            //const decimal tolerance = 0.001m;
-
-            //if (currentPrice > movingAverageValue * (1 + tolerance))
-            //    return TradeAction.Buy;
-            //else if (currentPrice < movingAverageValue * (1 - tolerance))
-            //    return TradeAction.Sell;
-            //else
-            //    return TradeAction.Neutral;
             const decimal relativeTolerance = 0.001m; // 0.1%
-            const decimal absoluteTolerance = 0.0001m; // Минимальный порог
+            const decimal absoluteTolerance = 0.0001m; // Minimum threshold
             decimal tolerance = Math.Max(relativeTolerance * movingAverageValue, absoluteTolerance);
 
             if (currentPrice > movingAverageValue + tolerance)

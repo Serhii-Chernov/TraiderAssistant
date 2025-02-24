@@ -20,28 +20,53 @@ namespace TraiderAssistant.UI
     /// </summary>
     public partial class MainWindow : Window
     {
-        //private ILogger _logger;
+        private ILogger _logger;
         public MainWindow()
         {
             InitializeComponent();
-            //SerilogLoggerFactory.Configure();
-            //_logger = new SerilogLoggerFactory().CreateLogger<MainWindow>();
-            //_logger.LogInfo("MainWindow initialized");
+            SerilogLoggerFactory.Configure();
+            _logger = SerilogLoggerFactory.CreateLogger<MainWindow>();
+            _logger.LogInfo("MainWindow initialized");
         }
-        private void BitcoinButton_Click(object sender, RoutedEventArgs e)
+        private void BTCButton_Click(object sender, RoutedEventArgs e)
         {
-            // Загружаем BitcoinChartView в Frame
+            _logger.LogInfo("MainContent: BTCUSDT");
             MainContent.Navigate(new CurrencyChartView(CurrencyPair.BTCUSDT));
         }
-
-        private void NotcoinButton_Click(object sender, RoutedEventArgs e)
+        private void ETHButton_Click(object sender, RoutedEventArgs e)
         {
-            MainContent.Navigate(new CurrencyChartView(CurrencyPair.NOTUSDT));
-        }
-
-        private void EthereumButton_Click(object sender, RoutedEventArgs e)
-        {
+            _logger.LogInfo("MainContent: ETHUSDT");
             MainContent.Navigate(new CurrencyChartView(CurrencyPair.ETHUSDT));
+        }
+        private void BNBButton_Click(object sender, RoutedEventArgs e)
+        {
+            _logger.LogInfo("MainContent: BNBUSDT");
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.BNBUSDT));
+        }
+        private void XRPButton_Click(object sender, RoutedEventArgs e)
+        {
+            _logger.LogInfo("MainContent: XPRUSDT");
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.XRPUSDT));
+        }
+        private void SOLButton_Click(object sender, RoutedEventArgs e)
+        {
+            _logger.LogInfo("MainContent: SOLUSDT");
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.SOLUSDT));
+        }
+        private void KAITOButton_Click(object sender, RoutedEventArgs e)
+        {
+            _logger.LogInfo("MainContent: KAITOUSDT");
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.KAITOUSDT));
+        }
+        private void DOGEButton_Click(object sender, RoutedEventArgs e)
+        {
+            _logger.LogInfo("MainContent: DOGEUSDT");
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.DOGEUSDT));
+        }
+        private void LTCButton_Click(object sender, RoutedEventArgs e)
+        {
+            _logger.LogInfo("MainContent: LTCUSDT");
+            MainContent.Navigate(new CurrencyChartView(CurrencyPair.LTCUSDT));
         }
     }
 }

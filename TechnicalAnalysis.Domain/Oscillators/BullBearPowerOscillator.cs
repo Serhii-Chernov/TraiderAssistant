@@ -14,26 +14,26 @@ namespace TechnicalAnalysis.Domain
         public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
             TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
-            int period = 13; // Используем стандартный период EMA
+            int period = 13; 
 
             var closePrices = data.Select(x => x.ClosePrice).ToList();
             var highs = data.Select(x => x.HighPrice).ToList();
             var lows = data.Select(x => x.LowPrice).ToList();
 
 
-            // Рассчитываем EMA за заданный период
+            // Calculating EMA for a given period
             decimal ema = CalculateEMA(closePrices, period);
 
-            // Bull Power = Максимальная цена - EMA
+            // Bull Power = Maximum Price - EMA
             decimal bullPower = highs.Last() - ema;
 
-            // Bear Power = Минимальная цена - EMA
+            // Bear Power = Minimum Price - EMA
             decimal bearPower = lows.Last() - ema;
             technicalAnalysisStruct.Name = Name;
             technicalAnalysisStruct.Value = (bullPower + bearPower) / 2;
             technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
 
-            // Итоговое значение как среднее между Bull и Bear Power
+            // The final value is the average between Bull and Bear Power
             return technicalAnalysisStruct;
         }
 
@@ -45,10 +45,10 @@ namespace TechnicalAnalysis.Domain
         private decimal CalculateEMA(IEnumerable<decimal> data, int period)
         {
             if (data.Count() < period)
-                throw new InvalidOperationException("Недостаточно данных для расчёта EMA.");
+                throw new InvalidOperationException("Not enough data to calculate EMA.");
 
             decimal multiplier = 2m / (period + 1);
-            decimal ema = data.Take(period).Average(); // Начальное значение — SMA
+            decimal ema = data.Take(period).Average(); // Initial value - SMA
 
             foreach (var price in data.Skip(period))
             {

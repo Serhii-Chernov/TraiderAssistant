@@ -24,7 +24,7 @@ namespace TechnicalAnalysis.Domain
             decimal sumGain = 0;
             decimal sumLoss = 0;
 
-            // Вычисляем начальные суммы приростов и убытков
+            // We calculate the initial amounts of gains and losses
             for (int i = 1; i <= period; i++)
             {
                 decimal delta = closePrices[i] - closePrices[i - 1];
@@ -37,7 +37,7 @@ namespace TechnicalAnalysis.Domain
             decimal avgGain = sumGain / period;
             decimal avgLoss = sumLoss / period;
 
-            // Вычисляем последующие средние приросты и убытки
+            // We calculate subsequent average gains and losses
             for (int i = period + 1; i < closePrices.Count; i++)
             {
                 decimal delta = closePrices[i] - closePrices[i - 1];
@@ -69,59 +69,4 @@ namespace TechnicalAnalysis.Domain
             return value > 70 ? TradeAction.Sell : (value < 30 ? TradeAction.Buy : TradeAction.Neutral);
         }
     }
-
-
-    //public class RSIOscillator : IOscillator
-    //{
-    //    public string Name { get; set; } = "RSI";
-
-    //    public decimal Calculate(IEnumerable<BinanceSpotKline> data)
-    //    {
-    //        int period = 14;
-    //        var closePrices = data.Select(k => k.ClosePrice).ToList();
-    //        if (closePrices.Count < period)
-    //            throw new ArgumentException("Not enough data to calculate.");
-
-    //        decimal sumGain = 0;
-    //        decimal sumLoss = 0;
-
-    //        // Calculate initial average gain and loss
-    //        for (int i = 1; i < period; i++)
-    //        {
-    //            decimal delta = closePrices[i] - closePrices[i - 1];
-    //            if (delta > 0)
-    //                sumGain += delta;
-    //            else
-    //                sumLoss -= delta;
-    //        }
-
-    //        decimal avgGain = sumGain / (period - 1);
-    //        decimal avgLoss = sumLoss / (period - 1);
-
-    //        // Calculate subsequent average gain and loss
-    //        for (int i = period; i < closePrices.Count; i++)
-    //        {
-    //            decimal delta = closePrices[i] - closePrices[i - 1];
-    //            if (delta > 0)
-    //            {
-    //                avgGain = (avgGain * (period - 1) + delta) / period;
-    //                avgLoss = (avgLoss * (period - 1)) / period;
-    //            }
-    //            else
-    //            {
-    //                avgGain = (avgGain * (period - 1)) / period;
-    //                avgLoss = (avgLoss * (period - 1) - delta) / period;
-    //            }
-    //        }
-
-    //        if (avgLoss == 0)
-    //            return 100;
-    //        if (avgGain == 0)
-    //            return 0;
-
-    //        decimal rs = avgGain / avgLoss;
-    //        return 100 - 100 / (1 + rs);
-    //    }
-    //}
-
 }

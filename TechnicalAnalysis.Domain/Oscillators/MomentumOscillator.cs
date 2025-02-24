@@ -20,7 +20,7 @@ namespace TechnicalAnalysis.Domain
             var closePrices = data.Select(k => k.ClosePrice).ToList();
 
             if (closePrices.Count <= period)
-                throw new InvalidOperationException("Недостаточно данных для расчета Momentum");
+                throw new InvalidOperationException("Not enough data to calculate Momentum");
 
             decimal currentClose = closePrices.Last();
             decimal previousClose = closePrices[closePrices.Count - period - 1];
@@ -28,7 +28,7 @@ namespace TechnicalAnalysis.Domain
             technicalAnalysisStruct.Value = currentClose - previousClose;
             technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
 
-            return technicalAnalysisStruct;  // Разница между текущей и предыдущей ценой
+            return technicalAnalysisStruct;  // The difference between the current and previous price
         }
 
         public string GetAction(decimal value, decimal? extraValue = null)

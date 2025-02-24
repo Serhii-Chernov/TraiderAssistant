@@ -8,9 +8,14 @@
         Title="MainWindow" Height="450" Width="800">
     <DockPanel>
         <Menu DockPanel.Dock="Top">
-            <MenuItem Header="BTC/USDT" Click="BitcoinButton_Click"/>
-            <MenuItem Header="NOT/USDT" Click="NotcoinButton_Click"/>
-            <MenuItem Header="ETH/USDT" Click="EthereumButton_Click"/>
+            <MenuItem Header="BTC/USDT" Click="BTCButton_Click"/>
+            <MenuItem Header="ETH/USDT" Click="ETHButton_Click"/>
+            <MenuItem Header="BNB/USDT" Click="BNBButton_Click"/>
+            <MenuItem Header="XRP/USDT" Click="XRPButton_Click"/>
+            <MenuItem Header="SOL/USDT" Click="SOLButton_Click"/>
+            <MenuItem Header="KAITO/USDT" Click="KAITOButton_Click"/>
+            <MenuItem Header="DOGE/USDT" Click="DOGEButton_Click"/>
+            <MenuItem Header="LTC/USDT" Click="LTCButton_Click"/>
         </Menu>
         <Frame x:Name="MainContent" />
     </DockPanel>

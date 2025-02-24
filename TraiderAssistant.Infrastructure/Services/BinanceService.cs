@@ -34,7 +34,7 @@ namespace TraiderAssistant.Infrastructure.Services
         {
             var interval = GetKlineInterval(startTime, endTime);
 
-            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime, limit: 1000);
+            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime, limit: 2000);
             if (result.Success)
             {
                 return result.Data.Cast<BinanceSpotKline>();
@@ -48,7 +48,7 @@ namespace TraiderAssistant.Infrastructure.Services
         private KlineInterval GetKlineInterval(DateTime startTime, DateTime endTime)
         {
             TimeSpan duration = endTime - startTime;
-            int targetPoints = 400; // Целевое количество точек данных
+            int targetPoints = 1900; // Целевое количество точек данных 400
 
             double secondsPerCandle = duration.TotalSeconds / targetPoints;
 

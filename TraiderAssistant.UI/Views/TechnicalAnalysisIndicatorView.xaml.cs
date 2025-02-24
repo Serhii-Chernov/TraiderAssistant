@@ -13,6 +13,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using TechnicalAnalysis.Shared;
 
 namespace TraiderAssistant.UI.Views
 {
@@ -21,18 +22,19 @@ namespace TraiderAssistant.UI.Views
     /// </summary>
     public partial class TechnicalAnalysisIndicatorView : UserControl
     {
+        private ILogger _logger;
         private Line arrow;
 
         public static readonly DependencyProperty TechnicalAnalysisIndicatorProperty =
-            DependencyProperty.Register("TechnicalAnalysisIndicator", typeof(double), typeof(TechnicalAnalysisIndicatorView), new PropertyMetadata(0.0, OnTechnicalAnalysisIndicatorChanged));
+            DependencyProperty.Register("TechnicalAnalysisIndicator", typeof(double?), typeof(TechnicalAnalysisIndicatorView), new PropertyMetadata(null, OnTechnicalAnalysisIndicatorChanged));//PropertyMetadata(0.0, OnTechnicalAnalysisIndicatorChanged
         public static readonly DependencyProperty TechnicalAnalysisTextProperty =
             DependencyProperty.Register("TechnicalAnalysisText", typeof(string), typeof(TechnicalAnalysisIndicatorView), new PropertyMetadata(string.Empty));
         public static readonly DependencyProperty TechnicalAnalysisNameProperty =
              DependencyProperty.Register("TechnicalAnalysisName", typeof(string), typeof(TechnicalAnalysisIndicatorView), new PropertyMetadata(string.Empty));
 
-        public double TechnicalAnalysisIndicator
+        public double? TechnicalAnalysisIndicator
         {
-            get { return (double)GetValue(TechnicalAnalysisIndicatorProperty); }
+            get { return (double?)GetValue(TechnicalAnalysisIndicatorProperty); }
             set { SetValue(TechnicalAnalysisIndicatorProperty, value); }
         }
         public string TechnicalAnalysisText
@@ -56,6 +58,9 @@ namespace TraiderAssistant.UI.Views
         {
             InitializeComponent();
             this.SizeChanged += TechnicalAnalysisIndicatorView_SizeChanged;
+
+            _logger = SerilogLoggerFactory.CreateLogger<TechnicalAnalysisIndicatorView>();
+            _logger.LogInfo("TechnicalAnalysisIndicatorView initialized");
         }
 
 
@@ -66,18 +71,16 @@ namespace TraiderAssistant.UI.Views
 
         private void UpdateFontSize()
         {
-            double newFontSize = 20; // Чем больше ширина, тем больше шрифт
-            //double newFontSize = Math.Max(22, ActualWidth / 30); // Чем больше ширина, тем больше шрифт
+            double newFontSize = 20; 
             TechnicalAnalysisNameTextBox.FontSize = newFontSize;
             TechnicalAnalysisTextTextBox.FontSize = newFontSize;
         }
 
         private void UpdateCanvas()
         {
+            _logger.LogInfo("UpdateCanvas");
             var canvas = AnalysisCanvas;
             canvas.Children.Clear();
-
-            if (canvas.ActualWidth == 0 || canvas.ActualHeight == 0) return;
 
             DrawSectors(canvas);
             DrawArrow(canvas);
@@ -85,41 +88,38 @@ namespace TraiderAssistant.UI.Views
 
         private void DrawSectors(Canvas canvas)
         {
+            _logger.LogInfo("DrawSectors");
 
-            // Центр круга
-            //double centerX = canvas.Width * 0.5;
-            //double centerY = canvas.Height * 0.9;
-            //double outerRadius = canvas.Height * 0.75; // Радиус внешней дуги
-            //double innerRadius = canvas.Height * 0.65; // Радиус внутренней дуги
+            // Circle centre
             double centerX = canvas.ActualWidth * 0.5;
             double centerY = canvas.ActualHeight * 0.9;
             double outerRadius = canvas.ActualHeight * 0.75;
-            double innerRadius = canvas.ActualHeight * 0.65;
+            double innerRadius = canvas.ActualHeight * 0.7;
 
 
             Brush[] sectorColors = { Brushes.Green, Brushes.LightGreen, Brushes.LightGray, Brushes.Orange, Brushes.Red };
             double sectorAngle = 180 / sectorColors.Length;
 
-            double currentAngle = 0; // Начальный угол
+            double currentAngle = 0; // Initial angle
 
             for (int i = 0; i < sectorColors.Length; i++)
             {
-                // Создаем сектор
+                // Creating a sector
                 var path = CreateOuterArc(centerX, centerY, outerRadius, innerRadius, currentAngle, currentAngle + sectorAngle);
                 path.Fill = sectorColors[i];
                 canvas.Children.Add(path);
-                // Смещаем текущий угол для следующего сектора
+                // Shift the current angle to the next sector
                 currentAngle += sectorAngle;
             }
         }
 
         private Path CreateOuterArc(double centerX, double centerY, double outerRadius, double innerRadius, double startAngle, double endAngle)
         {
-            // Переводим углы из градусов в радианы
+            // Converting angles from degrees to radians
             double startAngleRad = startAngle * Math.PI / 180;
             double endAngleRad = endAngle * Math.PI / 180;
 
-            // Вычисляем точки для внешней дуги
+            // Calculate points for the outer arc
             Point outerStartPoint = new Point(
                 centerX + outerRadius * Math.Cos(startAngleRad),
                 centerY - outerRadius * Math.Sin(startAngleRad)
@@ -130,7 +130,7 @@ namespace TraiderAssistant.UI.Views
                 centerY - outerRadius * Math.Sin(endAngleRad)
             );
 
-            // Вычисляем точки для внутренней дуги
+            // Calculate points for the inner arc
             Point innerStartPoint = new Point(
                 centerX + innerRadius * Math.Cos(endAngleRad),
                 centerY - innerRadius * Math.Sin(endAngleRad)
@@ -141,7 +141,7 @@ namespace TraiderAssistant.UI.Views
                 centerY - innerRadius * Math.Sin(startAngleRad)
             );
 
-            // Создаем сегменты дуг
+            // Create arc segments
             bool isLargeArc = endAngle - startAngle > 180;
 
             var outerArc = new ArcSegment
@@ -160,17 +160,16 @@ namespace TraiderAssistant.UI.Views
                 IsLargeArc = isLargeArc
             };
 
-            // Создаем фигуру (внешняя дуга с замыканием на внутреннюю)
+            // Create a figure (external arc with closure to internal)
             var pathFigure = new PathFigure
             {
                 StartPoint = innerStartPoint,
                 IsClosed = true
             };
-            pathFigure.Segments.Add(outerArc);  // Внешняя дуга
-            pathFigure.Segments.Add(new LineSegment(outerStartPoint, true)); // Линия от внешнего конца к внутреннему началу
-            pathFigure.Segments.Add(innerArc);  // Внутренняя дуга
+            pathFigure.Segments.Add(outerArc);  // External arc
+            pathFigure.Segments.Add(new LineSegment(outerStartPoint, true)); // Line from outer end to inner beginning
+            pathFigure.Segments.Add(innerArc);  // Inner arc
 
-            // Создаем путь
             var path = new Path
             {
                 Data = new PathGeometry(new[] { pathFigure })
@@ -181,17 +180,14 @@ namespace TraiderAssistant.UI.Views
 
         private void DrawArrow(Canvas canvas)
         {
-
-            //double centerX = canvas.Width * 0.5;
-            //double centerY = canvas.Height * 0.9;
-            //double radius = canvas.Height * 0.8;
+            _logger.LogInfo("DrawArrow");
 
             double centerX = canvas.ActualWidth * 0.5;
             double centerY = canvas.ActualHeight * 0.9;
             double radius = canvas.ActualHeight * 0.8;
 
-            // Обновляем угол поворота стрелки в зависимости от значения индикатора
-            double angle = IndicatorToAngle(TechnicalAnalysisIndicator);
+            // Updating the rotation angle of the arrow depending on the indicator value
+            double angle = IndicatorToAngle(TechnicalAnalysisIndicator ?? 0);
             double angleRadian = DegreesToRadians(angle);
 
             double pointX = radius * Math.Sin(angleRadian);
@@ -217,18 +213,19 @@ namespace TraiderAssistant.UI.Views
 
         double DegreesToRadians(double degrees)
         {
+            _logger.LogInfo("DegreesToRadians");
             return degrees == 0 ? 0 : degrees * Math.PI / 180.0;
         }
 
 
         /// <summary>
-        /// Преобразует значение индикатора в угол поворота стрелки.
-        /// Значение индикатора варьируется от -100 до 100.
-        /// Значение -100 соответствует углу -90°, 0 - 0°, 100 соответствует углу 90°.
+        /// Converts the indicator value to the angle of rotation of the arrow.
+        /// The indicator value varies from -100 to 100.
+        /// The value -100 corresponds to an angle of -90°, 0 - 0°, 100 corresponds to an angle of 90°.
         /// </summary>
-        /// <returns></returns>
         double IndicatorToAngle(double indicator)
         {
+            _logger.LogInfo("IndicatorToAngle");
             double angle = (90 / 100.0) * indicator;
             return angle;
         }

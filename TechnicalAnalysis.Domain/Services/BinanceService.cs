@@ -24,8 +24,8 @@ namespace TechnicalAnalysis.Domain
         public async Task<List<KlineData>> GetChartDataAsync(CurrencyPair currencyPair, DateTime startTime, DateTime endTime)
         {
             var interval = GetKlineInterval(startTime, endTime);
-
-            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime, limit: 1000);
+            
+            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime, limit: 1500);
             if (result.Success)
             {
                 List<KlineData> klineDataList = new List<KlineData>();
@@ -42,7 +42,6 @@ namespace TechnicalAnalysis.Domain
                     klineData.LowPrice = item.LowPrice;
                     klineData.HighPrice = item.HighPrice;
                     klineDataList.Add(klineData);
-                    //item.CloseTime = item.OpenTime.AddMilliseconds((long)item.Interval);
                 }
                 return klineDataList;
             }
@@ -54,48 +53,39 @@ namespace TechnicalAnalysis.Domain
         private KlineInterval GetKlineInterval(DateTime startTime, DateTime endTime)
         {
             TimeSpan duration = endTime - startTime;
-            int targetPoints = 400; // Целевое количество точек данных
+            int targetPoints = 400; // Target number of data points
 
             double secondsPerCandle = duration.TotalSeconds / targetPoints;
 
-            // Все возможные интервалы с их длительностью в секундах
-            var intervals = new Dictionary<KlineInterval, double>
+            // List of intervals sorted by duration
+            var intervals = new List<(KlineInterval Interval, double Seconds)>
             {
-                { KlineInterval.OneSecond, 1 },
-                { KlineInterval.OneMinute, 60 },
-                { KlineInterval.ThreeMinutes, 180 },
-                { KlineInterval.FiveMinutes, 300 },
-                { KlineInterval.FifteenMinutes, 900 },
-                { KlineInterval.ThirtyMinutes, 1800 },
-                { KlineInterval.OneHour, 3600 },
-                { KlineInterval.TwoHour, 7200 },
-                { KlineInterval.FourHour, 14400 },
-                { KlineInterval.SixHour, 21600 },
-                { KlineInterval.EightHour, 28800 },
-                { KlineInterval.TwelveHour, 43200 },
-                { KlineInterval.OneDay, 86400 },
-                { KlineInterval.ThreeDay, 259200 },
-                { KlineInterval.OneWeek, 604800 },
-                { KlineInterval.OneMonth, 2592000 } // Примерное значение месяца (30 дней)
+                (KlineInterval.OneSecond, 1),
+                (KlineInterval.OneMinute, 60),
+                (KlineInterval.ThreeMinutes, 180),
+                (KlineInterval.FiveMinutes, 300),
+                (KlineInterval.FifteenMinutes, 900),
+                (KlineInterval.ThirtyMinutes, 1800),
+                (KlineInterval.OneHour, 3600),
+                (KlineInterval.TwoHour, 7200),
+                (KlineInterval.FourHour, 14400),
+                (KlineInterval.SixHour, 21600),
+                (KlineInterval.EightHour, 28800),
+                (KlineInterval.TwelveHour, 43200),
+                (KlineInterval.OneDay, 86400),
+                (KlineInterval.ThreeDay, 259200),
+                (KlineInterval.OneWeek, 604800),
+                (KlineInterval.OneMonth, 2592000)
             };
 
-            // Выбираем ближайший больший или равный интервал
-            foreach (var interval in intervals)
-            {
-                if (interval.Value >= secondsPerCandle)
-                {
-                    return interval.Key;
-                }
-            }
-
-            // Если ничего не подошло, берем максимальный доступный интервал
-            return KlineInterval.OneMonth;
+            // Select the interval closest to `secondsPerCandle`
+            return intervals.OrderBy(i => Math.Abs(i.Seconds - secondsPerCandle))
+                            .First().Interval;
         }
-
 
         public async Task<IEnumerable<BinanceSpotKline>> GetChartDataForIndicatorsAsync(CurrencyPair currencyPair, DateTime endTime, KlineInterval interval = KlineInterval.OneMinute)
         {
-            // Учитываем коэффициент для текущего таймфрейма
+            // Taking into account the coefficient for the current timeframe
             int intervalMinutes = interval switch
             {
                 KlineInterval.OneMinute => 1,
@@ -106,16 +96,13 @@ namespace TechnicalAnalysis.Domain
                 KlineInterval.TwoHour => 120,
                 KlineInterval.FourHour => 240,
                 KlineInterval.OneDay => 1440,
-                KlineInterval.OneWeek => 604800,
-                KlineInterval.OneMonth => 2592000,
-
                 _ => throw new NotSupportedException("Unsupported interval")
             };
 
-            // Рассчитать временной диапазон
+            // Calculate time range
             DateTime startTime = endTime.AddMinutes(-200 * intervalMinutes);
 
-            // Загрузка данных
+            // Loading data
             var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime);
 
             if (result.Success)

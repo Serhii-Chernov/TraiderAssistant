@@ -11,19 +11,6 @@ namespace TechnicalAnalysis.WebApi.Controllers
     [Route("[controller]")]
     public class ChartController : Controller
     {
-        //[HttpGet("GetChartData")]
-        //public async Task<IActionResult> GetChartData(CurrencyPair currencyPair, DateTime startTime, DateTime endTime)
-        //{
-        //    BinanceService _binanceService = new BinanceService();
-        //    var data = await _binanceService.GetChartDataAsync(currencyPair, startTime, endTime);
-
-        //    // Преобразование данных в формат JSON
-        //    var jsonData = JsonConvert.SerializeObject(data);
-
-        //    // Возвращаем JSON-ответ
-        //    return Content(jsonData, "application/json");
-        //}
-
         [HttpGet("GetChartData")]
         public async Task<IEnumerable<KlineData>> GetChartData(CurrencyPair currencyPair, DateTime startTime, DateTime endTime)
         {

@@ -22,14 +22,14 @@ namespace TechnicalAnalysis.Domain
 
             var closePrices = data.Select(k => k.ClosePrice).ToList();
             if (closePrices.Count < longPeriod + signalPeriod)
-                throw new InvalidOperationException("Недостаточно данных для расчета MACD");
+                throw new InvalidOperationException("Not enough data to calculate MACD");
 
             var macdValues = CalculateMACD(closePrices, shortPeriod, longPeriod);
             var signalValues = CalculateEMA(macdValues, signalPeriod);
 
             decimal macd = macdValues.Last();
             decimal signal = signalValues.Last();
-            decimal histogram = macd - signal; // Гистограмма — это MACD - сигнальная линия
+            decimal histogram = macd - signal; // The histogram is the MACD signal line
 
             return new TechnicalAnalysisNameValueActionStruct
             {
@@ -49,7 +49,7 @@ namespace TechnicalAnalysis.Domain
         private List<decimal> CalculateMACD(List<decimal> prices, int shortPeriod, int longPeriod)
         {
             if (prices.Count < longPeriod)
-                throw new InvalidOperationException("Недостаточно данных для расчета MACD");
+                throw new InvalidOperationException("Not enough data to calculate MACD");
 
             var shortEma = CalculateEMA(prices, shortPeriod);
             var longEma = CalculateEMA(prices, longPeriod);
@@ -60,11 +60,11 @@ namespace TechnicalAnalysis.Domain
         private List<decimal> CalculateEMA(List<decimal> data, int period)
         {
             if (data.Count < period)
-                throw new InvalidOperationException($"Недостаточно данных для расчета EMA({period})");
+                throw new InvalidOperationException($"Not enough data to calculate EMA({period})");
 
             List<decimal> emaValues = new List<decimal>();
             decimal multiplier = 2m / (period + 1);
-            decimal sma = data.Take(period).Average(); // Начальное значение — SMA
+            decimal sma = data.Take(period).Average();
 
             emaValues.Add(sma);
             for (int i = period; i < data.Count; i++)

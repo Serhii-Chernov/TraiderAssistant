@@ -8,8 +8,6 @@ namespace TechnicalAnalysis.Shared
     {
         public string Name { get; set; }
         public decimal Value { get; set; }
-        //[JsonIgnore]
-        //public decimal NormalizedValue { get; set; }
         public string Action { get;  set; }  
         public TechnicalAnalysisNameValueActionStruct() { }
     }

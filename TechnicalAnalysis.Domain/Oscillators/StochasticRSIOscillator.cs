@@ -23,7 +23,7 @@ namespace TechnicalAnalysis.Domain
             if (closePrices.Count < period)
                 throw new InvalidOperationException("Not enough data to calculate Stochastic RSI");
 
-            // Вычисляем RSI
+            // Calculating RSI
             var rsiValues = closePrices.Select((_, i) =>
                 i >= period ? CalculateRSI(closePrices.Skip(i - period).Take(period).ToList(), period) : 0).Skip(period).ToList();
 
@@ -33,7 +33,7 @@ namespace TechnicalAnalysis.Domain
 
             decimal denominator = highestRSI - lowestRSI;
             if (denominator == 0)
-                technicalAnalysisStruct.Value = 50; // Средний уровень
+                technicalAnalysisStruct.Value = 50; // Intermediate level
             else
                 technicalAnalysisStruct.Value = ((currentRSI - lowestRSI) / denominator) * 100;
 

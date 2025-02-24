@@ -8,11 +8,13 @@ namespace TechnicalAnalysis.Shared
 {
     public enum CurrencyPair
     {
-        BTCUSDT,
-        NOTUSDT,
-        ETHUSDT
-        //    BTCUSDT,
-        //NOTUSDT,
-        //ETHUSDT
+        BTCUSDT,        
+        ETHUSDT, 
+        BNBUSDT,
+        XRPUSDT,
+        SOLUSDT,
+        KAITOUSDT,
+        DOGEUSDT,
+        LTCUSDT,
     }
 }

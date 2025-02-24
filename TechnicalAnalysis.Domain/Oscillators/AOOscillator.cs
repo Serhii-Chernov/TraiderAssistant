@@ -16,7 +16,7 @@ namespace TechnicalAnalysis.Domain
         public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
             if (data == null || data.Count() < 34) // Проверка на достаточность данных
-                throw new ArgumentException("Недостаточно данных для расчета AO (нужно >= 34)");
+                throw new ArgumentException("Not enough data to calculateAO (need >= 34)");
 
             TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
 
@@ -44,9 +44,6 @@ namespace TechnicalAnalysis.Domain
         private decimal CalculateLast(IEnumerable<BinanceSpotKline> data)
         {
             var closePrices = data.Select(k => k.ClosePrice).ToList();
-
-            if (closePrices.Count < 34) // Еще одна проверка
-                throw new InvalidOperationException("Недостаточно данных для расчета AO");
 
             decimal sma5 = closePrices.Skip(closePrices.Count - 5).Average();
             decimal sma34 = closePrices.Skip(closePrices.Count - 34).Average();
