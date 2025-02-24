@@ -42,7 +42,7 @@ namespace TraiderAssistant.UI
                 _logger.LogInfo($"Request sent: {stringRequest}");
                 var response = await httpClient.GetAsync(stringRequest);
                 _logger.LogInfo($"Response: {response}");
-                response.EnsureSuccessStatusCode(); // Выбросит исключение, если статус ответа не успешный
+                response.EnsureSuccessStatusCode(); // Throws an exception if the response status is not successful.
 
                 var jsonResponse = await response.Content.ReadAsStringAsync();
                 var result = JsonConvert.DeserializeObject<TechnicalAnalysisResult>(jsonResponse);
@@ -72,7 +72,7 @@ namespace TraiderAssistant.UI
                 response.EnsureSuccessStatusCode();
 
                 var jsonResponse = await response.Content.ReadAsStringAsync();
-                var klineDataList = JsonConvert.DeserializeObject<List<KlineData>>(jsonResponse); // Десериализация массива массивов
+                var klineDataList = JsonConvert.DeserializeObject<List<KlineData>>(jsonResponse);
 
                 return klineDataList;
             
