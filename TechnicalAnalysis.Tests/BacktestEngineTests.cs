@@ -1,4 +1,5 @@
 using FluentAssertions;
+using TechnicalAnalysis.Domain.Services;
 using TechnicalAnalysis.Domain.Services.Backtesting;
 using TechnicalAnalysis.Shared;
 
@@ -170,6 +171,55 @@ public class BacktestEngineTests
         result.Should().BeApproximately(8.3381m, 0.0001m);
     }
 
+    [Fact]
+    public void ForwardTestSummary_ShouldExposeWholePeriodRiskAndProfitConcentration()
+    {
+        var trades = new[]
+        {
+            Trade(DateTime.Parse("2026-01-10"), 10m),
+            Trade(DateTime.Parse("2026-01-20"), -5m),
+            Trade(DateTime.Parse("2026-02-10"), 2m),
+            Trade(DateTime.Parse("2026-03-10"), -3m)
+        };
+        var monthly = BacktestService.CreateMonthlyResults(trades, "SOLUSDT", "FourHour");
+        var result = new BacktestResult
+        {
+            ProfitPercentage = 3m,
+            MaxDrawdown = 8m,
+            ProfitFactor = 1.2m,
+            SharpeRatio = 0.4m,
+            TotalTrades = trades.Length,
+            WinningTrades = 2,
+            LosingTrades = 2,
+            Trades = trades.ToList()
+        };
+
+        var summary = BacktestService.CreateStrategyResult(result, monthly, "SOLUSDT", "FourHour", 3);
+
+        summary.TotalReturn.Should().Be(3m);
+        summary.MaxDrawdown.Should().Be(8m);
+        summary.MaxConsecutiveLosses.Should().Be(1);
+        summary.PositiveMonths.Should().Be(2);
+        summary.BestMonthProfitShare.Should().BeGreaterThan(50m);
+        summary.IsStable.Should().BeFalse();
+        summary.StabilityReason.Should().Contain("fewer than 30 trades");
+        summary.StabilityReason.Should().Contain("one month");
+    }
+
+    [Fact]
+    public void CalculateMaxConsecutiveLosses_ShouldResetAfterWin()
+    {
+        var trades = new[]
+        {
+            Trade(DateTime.Parse("2026-01-01"), -1m),
+            Trade(DateTime.Parse("2026-01-02"), -1m),
+            Trade(DateTime.Parse("2026-01-03"), 1m),
+            Trade(DateTime.Parse("2026-01-04"), -1m)
+        };
+
+        BacktestService.CalculateMaxConsecutiveLosses(trades).Should().Be(2);
+    }
+
     /// <summary>
     /// Verifies validation of capital before a simulation starts.
     /// </summary>
@@ -225,4 +275,11 @@ public class BacktestEngineTests
             TakeProfit: takeProfit,
             TradingFee: fee);
     }
+
+    private static TradeRecord Trade(DateTime exitTime, decimal profitPercent) => new()
+    {
+        ExitTime = exitTime,
+        ProfitPercent = profitPercent,
+        Profit = profitPercent
+    };
 }

@@ -9,7 +9,6 @@ namespace TechnicalAnalysis.Domain.MLModels
 {
     public class OptimizationPrediction
     {
-        [ColumnName("Score")]
-        public float PredictedProfit { get; set; }
+        [ColumnName("Score")] public float PredictedRiskAdjustedScore { get; set; }
     }
 }
