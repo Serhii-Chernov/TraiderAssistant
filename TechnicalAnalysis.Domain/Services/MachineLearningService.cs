@@ -21,17 +21,29 @@ namespace TechnicalAnalysis.Domain.Services
         private readonly StrategyProviderService _strategyProvider;
         private readonly string _modelPath;
 
+        internal const int MinimumTrainingTrades = 10;
+        internal const int PreferredTrainingTrades = 30;
+        internal const decimal DrawdownPenaltyWeight = 1.5m;
+        internal const decimal MissingTradePenalty = 0.25m;
+
         internal static readonly string[] FeatureColumnNames =
         {
             "TimeframeEncoded", "AssetEncoded",
-            nameof(OptimizationInput.RsiWeight), nameof(OptimizationInput.StochasticKWeight), nameof(OptimizationInput.CciWeight),
-            nameof(OptimizationInput.AdxWeight), nameof(OptimizationInput.AoWeight), nameof(OptimizationInput.MomentumWeight),
-            nameof(OptimizationInput.MacdWeight), nameof(OptimizationInput.UltimateWeight), nameof(OptimizationInput.WilliamsRWeight),
+            nameof(OptimizationInput.RsiWeight), nameof(OptimizationInput.StochasticKWeight),
+            nameof(OptimizationInput.CciWeight),
+            nameof(OptimizationInput.AdxWeight), nameof(OptimizationInput.AoWeight),
+            nameof(OptimizationInput.MomentumWeight),
+            nameof(OptimizationInput.MacdWeight), nameof(OptimizationInput.UltimateWeight),
+            nameof(OptimizationInput.WilliamsRWeight),
             nameof(OptimizationInput.BullBearWeight), nameof(OptimizationInput.StochasticRsiWeight),
-            nameof(OptimizationInput.Sma10Weight), nameof(OptimizationInput.Ema10Weight), nameof(OptimizationInput.Sma20Weight),
-            nameof(OptimizationInput.Ema20Weight), nameof(OptimizationInput.Sma30Weight), nameof(OptimizationInput.Ema30Weight),
-            nameof(OptimizationInput.Sma50Weight), nameof(OptimizationInput.Ema50Weight), nameof(OptimizationInput.Sma100Weight),
-            nameof(OptimizationInput.Ema100Weight), nameof(OptimizationInput.Sma200Weight), nameof(OptimizationInput.Ema200Weight),
+            nameof(OptimizationInput.Sma10Weight), nameof(OptimizationInput.Ema10Weight),
+            nameof(OptimizationInput.Sma20Weight),
+            nameof(OptimizationInput.Ema20Weight), nameof(OptimizationInput.Sma30Weight),
+            nameof(OptimizationInput.Ema30Weight),
+            nameof(OptimizationInput.Sma50Weight), nameof(OptimizationInput.Ema50Weight),
+            nameof(OptimizationInput.Sma100Weight),
+            nameof(OptimizationInput.Ema100Weight), nameof(OptimizationInput.Sma200Weight),
+            nameof(OptimizationInput.Ema200Weight),
             nameof(OptimizationInput.Hma9Weight),
             nameof(OptimizationInput.BuyThreshold), nameof(OptimizationInput.SellThreshold),
             nameof(OptimizationInput.StopLoss), nameof(OptimizationInput.TakeProfit),
@@ -57,13 +69,14 @@ namespace TechnicalAnalysis.Domain.Services
             // Загружаем обученную модель
             DataViewSchema modelSchema;
             ITransformer trainedModel = _mlContext.Model.Load(_modelPath, out modelSchema);
-            var predEngine = _mlContext.Model.CreatePredictionEngine<OptimizationInput, OptimizationPrediction>(trainedModel);
+            var predEngine =
+                _mlContext.Model.CreatePredictionEngine<OptimizationInput, OptimizationPrediction>(trainedModel);
 
             var rnd = new Random();
             int combinationsToTry = 10000;
 
             var strategyCombinations = await _dbContext.OptimizationRuns
-                .Where(r => r.TotalTrades > 0)
+                .Where(r => r.TotalTrades >= MinimumTrainingTrades)
                 .Select(r => new { r.Asset, r.Timeframe })
                 .Distinct()
                 .ToListAsync();
@@ -73,27 +86,28 @@ namespace TechnicalAnalysis.Domain.Services
 
             var summaryResults = new Dictionary<string, (float Profit, OptimizationInput Strategy)>();
 
-            Console.WriteLine($"Запуск глобального ИИ-анализа. {combinationsToTry} комбинаций на каждую связку Монета+Таймфрейм...");
+            Console.WriteLine(
+                $"Запуск глобального ИИ-анализа. {combinationsToTry} комбинаций на каждую связку Монета+Таймфрейм...");
 
             foreach (var combination in strategyCombinations)
             {
                 OptimizationInput bestStrategy = null;
-                float bestPredictedProfit = float.MinValue;
+                float bestPredictedScore = float.MinValue;
 
                 for (int i = 0; i < combinationsToTry; i++)
                 {
                     var input = GenerateRandomInput(rnd, combination.Timeframe, combination.Asset);
                     var prediction = predEngine.Predict(input);
 
-                    if (prediction.PredictedProfit > bestPredictedProfit)
+                    if (prediction.PredictedRiskAdjustedScore > bestPredictedScore)
                     {
-                        bestPredictedProfit = prediction.PredictedProfit;
+                        bestPredictedScore = prediction.PredictedRiskAdjustedScore;
                         bestStrategy = input;
                     }
                 }
 
                 string key = $"{combination.Asset} | {combination.Timeframe}";
-                summaryResults[key] = (bestPredictedProfit, bestStrategy);
+                summaryResults[key] = (bestPredictedScore, bestStrategy);
             }
 
             // === АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ БОЕВОЙ БАЗЫ ДАННЫХ ===
@@ -115,23 +129,25 @@ namespace TechnicalAnalysis.Domain.Services
 
                     Oscillators = new Dictionary<string, decimal>
                     {
-                        {"RSI", (decimal)strategy.RsiWeight}, {"StochasticK", (decimal)strategy.StochasticKWeight},
-                        {"CCI", (decimal)strategy.CciWeight}, {"ADX", (decimal)strategy.AdxWeight},
-                        {"AO", (decimal)strategy.AoWeight}, {"Momentum", (decimal)strategy.MomentumWeight},
-                        {"MACD", (decimal)strategy.MacdWeight}, {"UltimateOscillator", (decimal)strategy.UltimateWeight},
-                        {"Williams%R", (decimal)strategy.WilliamsRWeight}, {"BullBearPower", (decimal)strategy.BullBearWeight},
-                        {"StochasticRSI", (decimal)strategy.StochasticRsiWeight}
+                        { "RSI", (decimal)strategy.RsiWeight }, { "StochasticK", (decimal)strategy.StochasticKWeight },
+                        { "CCI", (decimal)strategy.CciWeight }, { "ADX", (decimal)strategy.AdxWeight },
+                        { "AO", (decimal)strategy.AoWeight }, { "Momentum", (decimal)strategy.MomentumWeight },
+                        { "MACD", (decimal)strategy.MacdWeight },
+                        { "UltimateOscillator", (decimal)strategy.UltimateWeight },
+                        { "Williams%R", (decimal)strategy.WilliamsRWeight },
+                        { "BullBearPower", (decimal)strategy.BullBearWeight },
+                        { "StochasticRSI", (decimal)strategy.StochasticRsiWeight }
                     },
 
                     MAs = new Dictionary<string, decimal>
                     {
-                        {"SMA(10)", (decimal)strategy.Sma10Weight}, {"EMA(10)", (decimal)strategy.Ema10Weight},
-                        {"SMA(20)", (decimal)strategy.Sma20Weight}, {"EMA(20)", (decimal)strategy.Ema20Weight},
-                        {"SMA(30)", (decimal)strategy.Sma30Weight}, {"EMA(30)", (decimal)strategy.Ema30Weight},
-                        {"SMA(50)", (decimal)strategy.Sma50Weight}, {"EMA(50)", (decimal)strategy.Ema50Weight},
-                        {"SMA(100)", (decimal)strategy.Sma100Weight}, {"EMA(100)", (decimal)strategy.Ema100Weight},
-                        {"SMA(200)", (decimal)strategy.Sma200Weight}, {"EMA(200)", (decimal)strategy.Ema200Weight},
-                        {"HMA(9)", (decimal)strategy.Hma9Weight}
+                        { "SMA(10)", (decimal)strategy.Sma10Weight }, { "EMA(10)", (decimal)strategy.Ema10Weight },
+                        { "SMA(20)", (decimal)strategy.Sma20Weight }, { "EMA(20)", (decimal)strategy.Ema20Weight },
+                        { "SMA(30)", (decimal)strategy.Sma30Weight }, { "EMA(30)", (decimal)strategy.Ema30Weight },
+                        { "SMA(50)", (decimal)strategy.Sma50Weight }, { "EMA(50)", (decimal)strategy.Ema50Weight },
+                        { "SMA(100)", (decimal)strategy.Sma100Weight }, { "EMA(100)", (decimal)strategy.Ema100Weight },
+                        { "SMA(200)", (decimal)strategy.Sma200Weight }, { "EMA(200)", (decimal)strategy.Ema200Weight },
+                        { "HMA(9)", (decimal)strategy.Hma9Weight }
                     },
                     BuyThreshold = (int)strategy.BuyThreshold,
                     SellThreshold = (int)strategy.SellThreshold,
@@ -170,33 +186,42 @@ namespace TechnicalAnalysis.Domain.Services
                 var strategy = result.Value.Strategy;
 
                 sb.AppendLine($"[{rank}] {key}");
-                sb.AppendLine($"Максимальный ожидаемый профит: {profit:0.##}%");
+                sb.AppendLine($"Максимальный ожидаемый risk-adjusted score: {profit:0.##}");
                 sb.AppendLine($"--- Настройки Риск-менеджмента ---");
-                sb.AppendLine($"Buy > {strategy.BuyThreshold} | Sell < {strategy.SellThreshold} | StopLoss: {strategy.StopLoss:P} | TakeProfit: {strategy.TakeProfit:P}");
+                sb.AppendLine(
+                    $"Buy > {strategy.BuyThreshold} | Sell < {strategy.SellThreshold} | StopLoss: {strategy.StopLoss:P} | TakeProfit: {strategy.TakeProfit:P}");
 
                 var oscDict = new Dictionary<string, float>
                 {
-                    {"RSI", strategy.RsiWeight}, {"Stoch", strategy.StochasticKWeight}, {"CCI", strategy.CciWeight},
-                    {"ADX", strategy.AdxWeight}, {"AO", strategy.AoWeight}, {"Momentum", strategy.MomentumWeight},
-                    {"MACD", strategy.MacdWeight}, {"Ultimate", strategy.UltimateWeight}, {"Will%R", strategy.WilliamsRWeight},
-                    {"BullBear", strategy.BullBearWeight}, {"StochRSI", strategy.StochasticRsiWeight}
+                    { "RSI", strategy.RsiWeight }, { "Stoch", strategy.StochasticKWeight },
+                    { "CCI", strategy.CciWeight },
+                    { "ADX", strategy.AdxWeight }, { "AO", strategy.AoWeight }, { "Momentum", strategy.MomentumWeight },
+                    { "MACD", strategy.MacdWeight }, { "Ultimate", strategy.UltimateWeight },
+                    { "Will%R", strategy.WilliamsRWeight },
+                    { "BullBear", strategy.BullBearWeight }, { "StochRSI", strategy.StochasticRsiWeight }
                 };
 
                 var maDict = new Dictionary<string, float>
                 {
-                    {"SMA10", strategy.Sma10Weight}, {"EMA10", strategy.Ema10Weight}, {"SMA20", strategy.Sma20Weight},
-                    {"EMA20", strategy.Ema20Weight}, {"SMA30", strategy.Sma30Weight}, {"EMA30", strategy.Ema30Weight},
-                    {"SMA50", strategy.Sma50Weight}, {"EMA50", strategy.Ema50Weight}, {"SMA100", strategy.Sma100Weight},
-                    {"EMA100", strategy.Ema100Weight}, {"SMA200", strategy.Sma200Weight}, {"EMA200", strategy.Ema200Weight},
-                    {"HMA9", strategy.Hma9Weight}
+                    { "SMA10", strategy.Sma10Weight }, { "EMA10", strategy.Ema10Weight },
+                    { "SMA20", strategy.Sma20Weight },
+                    { "EMA20", strategy.Ema20Weight }, { "SMA30", strategy.Sma30Weight },
+                    { "EMA30", strategy.Ema30Weight },
+                    { "SMA50", strategy.Sma50Weight }, { "EMA50", strategy.Ema50Weight },
+                    { "SMA100", strategy.Sma100Weight },
+                    { "EMA100", strategy.Ema100Weight }, { "SMA200", strategy.Sma200Weight },
+                    { "EMA200", strategy.Ema200Weight },
+                    { "HMA9", strategy.Hma9Weight }
                 };
 
                 var topOsc = oscDict.OrderByDescending(x => x.Value).Take(3).ToList();
                 var topMa = maDict.OrderByDescending(x => x.Value).Take(3).ToList();
 
                 sb.AppendLine($"--- Главные драйверы стратегии (ТОП-3) ---");
-                sb.AppendLine($"Осцилляторы: {topOsc[0].Key} ({topOsc[0].Value:P1}) | {topOsc[1].Key} ({topOsc[1].Value:P1}) | {topOsc[2].Key} ({topOsc[2].Value:P1})");
-                sb.AppendLine($"Трендовые:   {topMa[0].Key} ({topMa[0].Value:P1}) | {topMa[1].Key} ({topMa[1].Value:P1}) | {topMa[2].Key} ({topMa[2].Value:P1})");
+                sb.AppendLine(
+                    $"Осцилляторы: {topOsc[0].Key} ({topOsc[0].Value:P1}) | {topOsc[1].Key} ({topOsc[1].Value:P1}) | {topOsc[2].Key} ({topOsc[2].Value:P1})");
+                sb.AppendLine(
+                    $"Трендовые:   {topMa[0].Key} ({topMa[0].Value:P1}) | {topMa[1].Key} ({topMa[1].Value:P1}) | {topMa[2].Key} ({topMa[2].Value:P1})");
                 sb.AppendLine("--------------------------------------------------\n");
 
                 rank++;
@@ -206,8 +231,11 @@ namespace TechnicalAnalysis.Domain.Services
             var worstOverall = sortedResults[sortedResults.Count - 1];
 
             sb.AppendLine("=== ИТОГОВЫЙ ВЫВОД ИИ ===");
-            sb.AppendLine($"🏆 РЕКОМЕНДАЦИЯ: Используйте '{bestOverall.Key}'. Эта связка показывает наивысший потенциал ({bestOverall.Value.Profit:0.##}%).");
-            sb.AppendLine($"🛑 ИГНОРИРОВАТЬ: '{worstOverall.Key}' показал худшие результаты ({worstOverall.Value.Profit:0.##}%).");
+            sb.AppendLine(
+                $"🏆 ЛУЧШИЙ КАНДИДАТ: '{bestOverall.Key}' имеет наивысший risk-adjusted score ({bestOverall.Value.Profit:0.##}).");
+            sb.AppendLine($"🛑 ХУДШИЙ КАНДИДАТ: '{worstOverall.Key}' имеет score {worstOverall.Value.Profit:0.##}.");
+            sb.AppendLine(
+                "Кандидаты должны пройти независимый forward-test; score не является прогнозом процента прибыли.");
 
             return sb.ToString();
         }
@@ -217,7 +245,7 @@ namespace TechnicalAnalysis.Domain.Services
             Console.WriteLine("Выгрузка всех успешных прогонов из БД...");
 
             var runs = await _dbContext.OptimizationRuns
-                .Where(r => r.TotalTrades > 0)
+                .Where(r => r.TotalTrades >= MinimumTrainingTrades)
                 .ToListAsync();
 
             var mlInputData = CreateTrainingInputs(runs, out var parsingErrors);
@@ -240,7 +268,8 @@ namespace TechnicalAnalysis.Domain.Services
             // 1. ОТДЕЛЯЕМ КОНВЕЙЕР ПОДГОТОВКИ ДАННЫХ
             var dataProcessPipeline = _mlContext.Transforms
                 .Categorical.OneHotEncoding("TimeframeEncoded", nameof(OptimizationInput.Timeframe))
-                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("AssetEncoded", nameof(OptimizationInput.Asset)))
+                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("AssetEncoded",
+                    nameof(OptimizationInput.Asset)))
                 .Append(_mlContext.Transforms.Concatenate("Features", FeatureColumnNames));
 
             // 2. ОБУЧАЕМ ОБРАБОТЧИК И ТРАНСФОРМИРУЕМ ДАННЫЕ
@@ -249,12 +278,14 @@ namespace TechnicalAnalysis.Domain.Services
             var transformedTestData = dataPrepModel.Transform(trainTestSplit.TestSet);
 
             // 3. СОЗДАЕМ И ОБУЧАЕМ ПРЕДИКТОР НА ТРАНСФОРМИРОВАННЫХ ДАННЫХ
-            var trainer = _mlContext.Regression.Trainers.FastTree(labelColumnName: "Label", featureColumnName: "Features");
+            var trainer =
+                _mlContext.Regression.Trainers.FastTree(labelColumnName: "Label", featureColumnName: "Features");
             var predictor = trainer.Fit(transformedTrainData);
 
             // 4. ОЦЕНИВАЕМ ТОЧНОСТЬ
             var predictions = predictor.Transform(transformedTestData);
-            var metrics = _mlContext.Regression.Evaluate(predictions, labelColumnName: "Label", scoreColumnName: "Score");
+            var metrics =
+                _mlContext.Regression.Evaluate(predictions, labelColumnName: "Label", scoreColumnName: "Score");
 
             // 5. СОХРАНЯЕМ ПОЛНУЮ МОДЕЛЬ ДЛЯ ДРУГИХ МЕТОДОВ
             var fullModel = dataPrepModel.Append(predictor);
@@ -266,7 +297,8 @@ namespace TechnicalAnalysis.Domain.Services
             Console.WriteLine("Оценка важности признаков (PFI) на тестовой выборке...");
 
             // Скармливаем алгоритму только предиктор и уже трансформированные данные
-            var pfi = _mlContext.Regression.PermutationFeatureImportance(predictor, transformedTestData, permutationCount: 3, labelColumnName: "Label");
+            var pfi = _mlContext.Regression.PermutationFeatureImportance(predictor, transformedTestData,
+                permutationCount: 3, labelColumnName: "Label");
 
             // Извлекаем имена слотов безопасно (без конфликтов с async/await и лямбдами)
             string[] slotNamesArray = GetSlotNames(transformedTestData.Schema["Features"]);
@@ -283,9 +315,12 @@ namespace TechnicalAnalysis.Domain.Services
 
             // Формируем отчет
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"Глобальная модель обучена на {mlInputData.Count} записях!");
+            sb.AppendLine($"Глобальная risk-adjusted модель обучена на {mlInputData.Count} записях!");
             sb.AppendLine($"Поврежденных записей пропущено: {parsingErrors.Count}.");
-            sb.AppendLine($"R-Squared: {metrics.RSquared:0.####} | RMSE: {metrics.RootMeanSquaredError:0.##}%\n");
+            sb.AppendLine($"Минимум сделок в обучающей записи: {MinimumTrainingTrades}.");
+            sb.AppendLine(
+                $"Label = Profit - {DrawdownPenaltyWeight:0.##} * MaxDrawdown - штраф за число сделок ниже {PreferredTrainingTrades}.");
+            sb.AppendLine($"R-Squared: {metrics.RSquared:0.####} | RMSE score: {metrics.RootMeanSquaredError:0.##}\n");
 
             sb.AppendLine("=== ТОП-10 САМЫХ ВАЖНЫХ ПАРАМЕТРОВ (PFI) ===");
             sb.AppendLine("Чем выше падение метрики, тем важнее этот параметр для алгоритма:");
@@ -310,6 +345,7 @@ namespace TechnicalAnalysis.Domain.Services
                 {
                     arr[i] = span[i].ToString(); // Перегоняем в обычный массив строк
                 }
+
                 return arr;
             }
         }
@@ -370,28 +406,48 @@ namespace TechnicalAnalysis.Domain.Services
                         TakeProfit = (float)config.TakeProfit,
                         OscillatorGroupWeight = (float)config.OscillatorGroupWeight,
                         MaGroupWeight = (float)config.MaGroupWeight,
-                        TotalProfitPercent = (float)run.TotalProfitPercent
+                        RiskAdjustedScore = CalculateRiskAdjustedScore(run)
                     });
                 }
                 catch (Exception ex) when (ex is JsonException || ex is NullReferenceException)
                 {
-                    parsingErrors.Add($"OptimizationRun {run.Id} ({run.Asset}/{run.Timeframe}) has invalid weights JSON: {ex.Message}");
+                    parsingErrors.Add(
+                        $"OptimizationRun {run.Id} ({run.Asset}/{run.Timeframe}) has invalid weights JSON: {ex.Message}");
                 }
             }
 
             return inputs;
         }
 
+        internal static float CalculateRiskAdjustedScore(OptimizationRun run)
+        {
+            int missingTrades = Math.Max(0, PreferredTrainingTrades - run.TotalTrades);
+            decimal score = run.TotalProfitPercent
+                            - DrawdownPenaltyWeight * run.MaxDrawdown
+                            - MissingTradePenalty * missingTrades;
+            return (float)score;
+        }
+
         private OptimizationInput GenerateRandomInput(Random rnd, string timeframe, string asset)
         {
             float[] oscW = new float[11];
             float oscSum = 0;
-            for (int i = 0; i < 11; i++) { oscW[i] = (float)rnd.NextDouble(); oscSum += oscW[i]; }
+            for (int i = 0; i < 11; i++)
+            {
+                oscW[i] = (float)rnd.NextDouble();
+                oscSum += oscW[i];
+            }
+
             for (int i = 0; i < 11; i++) oscW[i] /= oscSum;
 
             float[] maW = new float[13];
             float maSum = 0;
-            for (int i = 0; i < 13; i++) { maW[i] = (float)rnd.NextDouble(); maSum += maW[i]; }
+            for (int i = 0; i < 13; i++)
+            {
+                maW[i] = (float)rnd.NextDouble();
+                maSum += maW[i];
+            }
+
             for (int i = 0; i < 13; i++) maW[i] /= maSum;
 
             float oscGroup = (float)rnd.NextDouble();

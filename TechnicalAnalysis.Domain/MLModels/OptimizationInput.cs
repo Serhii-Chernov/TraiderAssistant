@@ -45,8 +45,7 @@ namespace TechnicalAnalysis.Domain.MLModels
         [LoadColumn(30)] public float OscillatorGroupWeight { get; set; }
         [LoadColumn(31)] public float MaGroupWeight { get; set; }
 
-        // Результат (Target)
-        [LoadColumn(32), ColumnName("Label")]
-        public float TotalProfitPercent { get; set; }
+        // Risk-adjusted optimization target. Raw profit is deliberately not used as the label.
+        [LoadColumn(32), ColumnName("Label")] public float RiskAdjustedScore { get; set; }
     }
 }

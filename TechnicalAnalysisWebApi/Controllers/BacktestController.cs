@@ -33,7 +33,8 @@ namespace TechnicalAnalysis.WebApi.Controllers
         {
             try
             {
-                var result = await _backtestService.RunBacktestAsync(currencyPair, startDate, endDate, initialDeposit, interval);
+                var result =
+                    await _backtestService.RunBacktestAsync(currencyPair, startDate, endDate, initialDeposit, interval);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -50,7 +51,9 @@ namespace TechnicalAnalysis.WebApi.Controllers
             DateTime startDate,
             DateTime endDate,
             decimal initialDeposit = 1000,
-            bool useDefaultStrategy = false)
+            bool useDefaultStrategy = false,
+            CurrencyPair? pair = null,
+            KlineInterval? interval = null)
         {
             if (endDate <= startDate)
             {
@@ -59,7 +62,47 @@ namespace TechnicalAnalysis.WebApi.Controllers
 
             try
             {
-                var result = await _backtestService.RunForwardTestAsync(startDate, endDate, initialDeposit, useDefaultStrategy);
+                var result = await _backtestService.RunForwardTestAsync(
+                    startDate,
+                    endDate,
+                    initialDeposit,
+                    useDefaultStrategy,
+                    pair,
+                    interval);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Runs an out-of-sample test and returns exact whole-period metrics plus monthly rows.
+        /// </summary>
+        [HttpGet("RunForwardTestReport")]
+        public async Task<IActionResult> RunForwardTestReport(
+            DateTime startDate,
+            DateTime endDate,
+            decimal initialDeposit = 1000,
+            bool useDefaultStrategy = false,
+            CurrencyPair? pair = null,
+            KlineInterval? interval = null)
+        {
+            if (endDate <= startDate)
+            {
+                return BadRequest("End date must be greater than start date.");
+            }
+
+            try
+            {
+                var result = await _backtestService.RunForwardTestReportAsync(
+                    startDate,
+                    endDate,
+                    initialDeposit,
+                    useDefaultStrategy,
+                    pair,
+                    interval);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -76,7 +119,9 @@ namespace TechnicalAnalysis.WebApi.Controllers
             DateTime startDate,
             DateTime endDate,
             decimal initialDeposit = 1000,
-            bool useDefaultStrategy = false)
+            bool useDefaultStrategy = false,
+            CurrencyPair? pair = null,
+            KlineInterval? interval = null)
         {
             if (endDate <= startDate)
             {
@@ -85,7 +130,13 @@ namespace TechnicalAnalysis.WebApi.Controllers
 
             try
             {
-                var result = await _backtestService.RunForwardTestAsync(startDate, endDate, initialDeposit, useDefaultStrategy);
+                var result = await _backtestService.RunForwardTestAsync(
+                    startDate,
+                    endDate,
+                    initialDeposit,
+                    useDefaultStrategy,
+                    pair,
+                    interval);
                 var workbook = ForwardTestExcelExporter.Export(result);
                 var strategyMode = useDefaultStrategy ? "default" : "ml";
                 var fileName = $"forward-test_{strategyMode}_{startDate:yyyy-MM-dd}_{endDate:yyyy-MM-dd}.xlsx";
@@ -115,7 +166,8 @@ namespace TechnicalAnalysis.WebApi.Controllers
             try
             {
                 // Вызываем метод оптимизации, добавленный в сервис на предыдущем шаге
-                var results = await _backtestService.RunOptimizationAsync(currencyPair, startDate, endDate, initialDeposit);
+                var results =
+                    await _backtestService.RunOptimizationAsync(currencyPair, startDate, endDate, initialDeposit);
                 return Ok(results);
             }
             catch (Exception ex)
@@ -193,13 +245,16 @@ namespace TechnicalAnalysis.WebApi.Controllers
             try
             {
                 if (!Enum.TryParse<CurrencyPair>(pair, out var parsedPair)) return BadRequest("Неверная валютная пара");
-                if (!Enum.TryParse<KlineInterval>(interval, out var parsedInterval)) return BadRequest("Неверный таймфрейм");
+                if (!Enum.TryParse<KlineInterval>(interval, out var parsedInterval))
+                    return BadRequest("Неверный таймфрейм");
 
                 // Даты, на которых обучался робот (чтобы показать результаты комиссии)
                 DateTime startDate = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
                 DateTime endDate = DateTime.UtcNow;
 
-                var result = await _backtestService.RunAITestAsync(parsedPair, parsedInterval, startDate, endDate, initialDeposit);
+                var result =
+                    await _backtestService.RunAITestAsync(parsedPair, parsedInterval, startDate, endDate,
+                        initialDeposit);
 
                 return Ok(result);
             }

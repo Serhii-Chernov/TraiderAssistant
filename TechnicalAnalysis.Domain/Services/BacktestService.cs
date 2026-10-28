@@ -27,7 +27,8 @@ namespace TechnicalAnalysis.Domain.Services
         private const int WarmUpCandlesCount = 300;
         internal const int TargetOptimizationCombinationsPerInterval = 200;
 
-        public BacktestService(BinanceService binanceService, TechnicalAnalysisService analysisService, AppDbContext dbContext, ILogger<BacktestService> logger)
+        public BacktestService(BinanceService binanceService, TechnicalAnalysisService analysisService,
+            AppDbContext dbContext, ILogger<BacktestService> logger)
         {
             _binanceService = binanceService;
             _analysisService = analysisService;
@@ -39,92 +40,238 @@ namespace TechnicalAnalysis.Domain.Services
         /// Runs out-of-sample testing for all active strategies stored in the database and groups closed trades by month.
         /// </summary>
         /// <returns>Monthly forward-test results grouped by asset and timeframe.</returns>
-        public async Task<List<ForwardTestMonthlyResult>> RunForwardTestAsync(DateTime startTime, DateTime endTime, decimal initialDeposit, bool useDefaultStrategy = false)
+        public async Task<List<ForwardTestMonthlyResult>> RunForwardTestAsync(
+            DateTime startTime,
+            DateTime endTime,
+            decimal initialDeposit,
+            bool useDefaultStrategy = false,
+            CurrencyPair? pairFilter = null,
+            KlineInterval? timeframeFilter = null)
+        {
+            var report = await RunForwardTestReportAsync(
+                startTime,
+                endTime,
+                initialDeposit,
+                useDefaultStrategy,
+                pairFilter,
+                timeframeFilter);
+
+            return report.Months;
+        }
+
+        /// <summary>
+        /// Runs an out-of-sample test and returns exact whole-period metrics together with monthly rows.
+        /// </summary>
+        public async Task<ForwardTestReport> RunForwardTestReportAsync(
+            DateTime startTime,
+            DateTime endTime,
+            decimal initialDeposit,
+            bool useDefaultStrategy = false,
+            CurrencyPair? pairFilter = null,
+            KlineInterval? timeframeFilter = null)
         {
             ValidateBacktestRequest(startTime, endTime, initialDeposit);
-            _logger.LogInformation("Forward test started. StartTime: {StartTime}, EndTime: {EndTime}, InitialDeposit: {InitialDeposit}, UseDefaultStrategy: {UseDefaultStrategy}", startTime, endTime, initialDeposit, useDefaultStrategy);
+            _logger.LogInformation(
+                "Forward test started. StartTime: {StartTime}, EndTime: {EndTime}, InitialDeposit: {InitialDeposit}, UseDefaultStrategy: {UseDefaultStrategy}, PairFilter: {PairFilter}, TimeframeFilter: {TimeframeFilter}",
+                startTime,
+                endTime,
+                initialDeposit,
+                useDefaultStrategy,
+                pairFilter,
+                timeframeFilter);
 
-            var reports = new List<ForwardTestMonthlyResult>();
+            IQueryable<ActiveStrategy> strategyQuery = _dbContext.ActiveStrategies.AsNoTracking();
+            if (pairFilter.HasValue)
+                strategyQuery = strategyQuery.Where(strategy => strategy.Asset == pairFilter.Value.ToString());
+            if (timeframeFilter.HasValue)
+                strategyQuery = strategyQuery.Where(strategy => strategy.Timeframe == timeframeFilter.Value.ToString());
 
-            var activeStrategies = await _dbContext.ActiveStrategies.ToListAsync();
-            _logger.LogInformation("Loaded {StrategyCount} active strategies for forward test.", activeStrategies.Count);
+            var activeStrategies = await strategyQuery.ToListAsync();
+            var report = new ForwardTestReport
+            {
+                StartDate = startTime,
+                EndDate = endTime,
+                InitialDeposit = initialDeposit,
+                StrategyMode = useDefaultStrategy ? "Default" : "ML"
+            };
+
+            _logger.LogInformation("Loaded {StrategyCount} active strategies for forward test.",
+                activeStrategies.Count);
 
             foreach (var strategy in activeStrategies)
             {
                 if (!Enum.TryParse<CurrencyPair>(strategy.Asset, out var pair) ||
                     !Enum.TryParse<KlineInterval>(strategy.Timeframe, out var timeframe))
                 {
-                    _logger.LogWarning("Skipping active strategy {StrategyId}: cannot parse asset {Asset} or timeframe {Timeframe}.", strategy.Id, strategy.Asset, strategy.Timeframe);
+                    _logger.LogWarning(
+                        "Skipping active strategy {StrategyId}: cannot parse asset {Asset} or timeframe {Timeframe}.",
+                        strategy.Id, strategy.Asset, strategy.Timeframe);
                     continue;
                 }
 
-                BacktestResult result;
                 try
                 {
-                    _logger.LogInformation("Forward test strategy started. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}", strategy.Id, strategy.Asset, strategy.Timeframe);
-                    result = await RunActiveStrategyAsync(strategy, pair, timeframe, startTime, endTime, initialDeposit, useDefaultStrategy);
-                    _logger.LogInformation("Forward test strategy finished. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, Trades: {Trades}", strategy.Id, strategy.Asset, strategy.Timeframe, result.TotalTrades);
+                    _logger.LogInformation(
+                        "Forward test strategy started. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}",
+                        strategy.Id, strategy.Asset, strategy.Timeframe);
+                    var result = await RunActiveStrategyAsync(strategy, pair, timeframe, startTime, endTime,
+                        initialDeposit, useDefaultStrategy);
+                    var monthlyResults = CreateMonthlyResults(result.Trades, pair.ToString(), timeframe.ToString());
+
+                    report.Months.AddRange(monthlyResults);
+                    report.Strategies.Add(CreateStrategyResult(
+                        result,
+                        monthlyResults,
+                        pair.ToString(),
+                        timeframe.ToString(),
+                        CountCalendarMonths(startTime, endTime)));
+
+                    _logger.LogInformation(
+                        "Forward test strategy finished. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, Trades: {Trades}",
+                        strategy.Id, strategy.Asset, strategy.Timeframe, result.TotalTrades);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Forward test strategy failed. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}", strategy.Id, strategy.Asset, strategy.Timeframe);
-                    continue;
-                }
-
-                var monthlyGroups = result.Trades
-                    .Where(t => t.ExitTime.HasValue)
-                    .GroupBy(t => t.ExitTime.Value.ToString("yyyy-MM"))
-                    .OrderBy(g => g.Key)
-                    .ToList();
-
-                _logger.LogInformation("Grouped strategy results by month. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, MonthGroups: {MonthGroups}", strategy.Id, strategy.Asset, strategy.Timeframe, monthlyGroups.Count);
-
-                foreach (var group in monthlyGroups)
-                {
-                    int totalTrades = group.Count();
-                    int winTrades = group.Count(t => t.Profit > 0);
-                    decimal winRate = totalTrades > 0 ? (decimal)winTrades / totalTrades * 100 : 0;
-                    decimal netProfit = BacktestEngine.CalculateCompoundedReturn(group);
-                    decimal maxDrawdown = BacktestEngine.CalculateTradeMaxDrawdown(group);
-
-                    reports.Add(new ForwardTestMonthlyResult
-                    {
-                        Month = group.Key,
-                        CurrencyPair = pair.ToString(),
-                        Timeframe = timeframe.ToString(),
-                        TotalTrades = totalTrades,
-                        WinRate = Math.Round(winRate, 2),
-                        MaxDrawdown = Math.Round(maxDrawdown, 2),
-                        NetProfit = Math.Round(netProfit, 2)
-                    });
+                    _logger.LogError(ex,
+                        "Forward test strategy failed. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}",
+                        strategy.Id, strategy.Asset, strategy.Timeframe);
                 }
             }
 
-            var groupedReports = reports
-                .GroupBy(r => new { r.Month, r.CurrencyPair, r.Timeframe })
-                .Select(g =>
+            report.Months = report.Months
+                .OrderBy(row => row.Month)
+                .ThenBy(row => row.CurrencyPair)
+                .ThenBy(row => row.Timeframe)
+                .ToList();
+            report.Strategies = report.Strategies
+                .OrderByDescending(row => row.IsStable)
+                .ThenByDescending(row => row.TotalReturn)
+                .ThenBy(row => row.CurrencyPair)
+                .ThenBy(row => row.Timeframe)
+                .ToList();
+
+            _logger.LogInformation("Forward test finished. Strategies: {StrategyCount}, MonthlyRows: {MonthlyRows}",
+                report.Strategies.Count, report.Months.Count);
+            return report;
+        }
+
+        internal static List<ForwardTestMonthlyResult> CreateMonthlyResults(
+            IEnumerable<TradeRecord> trades,
+            string currencyPair,
+            string timeframe)
+        {
+            return trades
+                .Where(trade => trade.ExitTime.HasValue)
+                .GroupBy(trade => trade.ExitTime.Value.ToString("yyyy-MM"))
+                .OrderBy(group => group.Key)
+                .Select(group =>
                 {
-                    int totalTrades = g.Sum(r => r.TotalTrades);
+                    int totalTrades = group.Count();
+                    int winningTrades = group.Count(trade => trade.Profit > 0m);
 
                     return new ForwardTestMonthlyResult
                     {
-                        Month = g.Key.Month,
-                        CurrencyPair = g.Key.CurrencyPair,
-                        Timeframe = g.Key.Timeframe,
+                        Month = group.Key,
+                        CurrencyPair = currencyPair,
+                        Timeframe = timeframe,
                         TotalTrades = totalTrades,
-                        WinRate = totalTrades > 0 ? Math.Round(g.Sum(r => r.WinRate * r.TotalTrades) / totalTrades, 2) : 0,
-                        MaxDrawdown = Math.Round(g.Max(r => r.MaxDrawdown), 2),
-                        NetProfit = Math.Round(g.Sum(r => r.NetProfit), 2)
+                        WinRate = totalTrades == 0 ? 0m : Math.Round((decimal)winningTrades / totalTrades * 100m, 2),
+                        MaxDrawdown = Math.Round(BacktestEngine.CalculateTradeMaxDrawdown(group), 2),
+                        NetProfit = Math.Round(BacktestEngine.CalculateCompoundedReturn(group), 2)
                     };
                 })
-                .OrderBy(r => r.Month)
-                .ThenBy(r => r.CurrencyPair)
-                .ThenBy(r => r.Timeframe)
                 .ToList();
+        }
 
-            _logger.LogInformation("Forward test finished. ResultRows: {ResultRows}", groupedReports.Count);
+        internal static ForwardTestStrategyResult CreateStrategyResult(
+            BacktestResult result,
+            IReadOnlyCollection<ForwardTestMonthlyResult> monthlyResults,
+            string currencyPair,
+            string timeframe,
+            int totalMonths)
+        {
+            int positiveMonths = monthlyResults.Count(row => row.NetProfit > 0m);
+            decimal positiveMonthRate = totalMonths == 0 ? 0m : (decimal)positiveMonths / totalMonths * 100m;
+            decimal bestMonthProfit = monthlyResults.Count == 0 ? 0m : monthlyResults.Max(row => row.NetProfit);
+            decimal positiveProfit = monthlyResults.Where(row => row.NetProfit > 0m).Sum(row => row.NetProfit);
+            decimal bestMonthProfitShare = positiveProfit <= 0m
+                ? 0m
+                : Math.Max(0m, bestMonthProfit) / positiveProfit * 100m;
+            decimal? profitFactor = result.ProfitFactor == decimal.MaxValue
+                ? null
+                : Math.Round(result.ProfitFactor, 2);
+            int maxConsecutiveLosses = CalculateMaxConsecutiveLosses(result.Trades);
 
-            return groupedReports;
+            var stabilityFailures = new List<string>();
+            if (result.TotalTrades < 30) stabilityFailures.Add("fewer than 30 trades");
+            if (result.ProfitPercentage <= 0m) stabilityFailures.Add("non-positive return");
+            if (result.MaxDrawdown > result.ProfitPercentage)
+                stabilityFailures.Add("drawdown exceeds return");
+            if (positiveMonthRate < 50m) stabilityFailures.Add("fewer than 50% positive months");
+            if (bestMonthProfitShare > 50m)
+                stabilityFailures.Add("more than 50% of positive profit comes from one month");
+
+            return new ForwardTestStrategyResult
+            {
+                CurrencyPair = currencyPair,
+                Timeframe = timeframe,
+                TotalTrades = result.TotalTrades,
+                WinningTrades = result.WinningTrades,
+                LosingTrades = result.LosingTrades,
+                WinRate = result.TotalTrades == 0
+                    ? 0m
+                    : Math.Round((decimal)result.WinningTrades / result.TotalTrades * 100m, 2),
+                TotalReturn = Math.Round(result.ProfitPercentage, 2),
+                MaxDrawdown = Math.Round(result.MaxDrawdown, 2),
+                ProfitFactor = profitFactor,
+                SharpeRatio = Math.Round(result.SharpeRatio, 2),
+                MaxConsecutiveLosses = maxConsecutiveLosses,
+                PositiveMonths = positiveMonths,
+                TotalMonths = totalMonths,
+                PositiveMonthRate = Math.Round(positiveMonthRate, 2),
+                BestMonthProfit = Math.Round(bestMonthProfit, 2),
+                BestMonthProfitShare = Math.Round(bestMonthProfitShare, 2),
+                IsStable = stabilityFailures.Count == 0,
+                StabilityReason = stabilityFailures.Count == 0
+                    ? "Passed all stability checks."
+                    : string.Join("; ", stabilityFailures)
+            };
+        }
+
+        internal static int CalculateMaxConsecutiveLosses(IEnumerable<TradeRecord> trades)
+        {
+            int current = 0;
+            int maximum = 0;
+
+            foreach (var trade in trades.OrderBy(trade => trade.ExitTime))
+            {
+                if (trade.Profit <= 0m)
+                {
+                    current++;
+                    maximum = Math.Max(maximum, current);
+                }
+                else
+                {
+                    current = 0;
+                }
+            }
+
+            return maximum;
+        }
+
+        private static int CountCalendarMonths(DateTime startTime, DateTime endTime)
+        {
+            var firstMonth = new DateTime(startTime.Year, startTime.Month, 1, 0, 0, 0, startTime.Kind);
+            var lastIncludedInstant = endTime.AddTicks(-1);
+            var lastMonth = new DateTime(
+                lastIncludedInstant.Year,
+                lastIncludedInstant.Month,
+                1,
+                0,
+                0,
+                0,
+                lastIncludedInstant.Kind);
+            return (lastMonth.Year - firstMonth.Year) * 12 + lastMonth.Month - firstMonth.Month + 1;
         }
 
         private async Task<BacktestResult> RunActiveStrategyAsync(
@@ -136,29 +283,43 @@ namespace TechnicalAnalysis.Domain.Services
             decimal initialDeposit,
             bool useDefaultStrategy)
         {
-            _logger.LogInformation("Loading historical candles. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, StartTime: {StartTime}, EndTime: {EndTime}", strategy.Id, strategy.Asset, strategy.Timeframe, startTime, endTime);
+            _logger.LogInformation(
+                "Loading historical candles. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, StartTime: {StartTime}, EndTime: {EndTime}",
+                strategy.Id, strategy.Asset, strategy.Timeframe, startTime, endTime);
 
-            var config = useDefaultStrategy ? null : JsonConvert.DeserializeObject<WeightsJsonSchema>(strategy.IndicatorWeightsJson);
+            var config = useDefaultStrategy
+                ? null
+                : JsonConvert.DeserializeObject<WeightsJsonSchema>(strategy.IndicatorWeightsJson);
 
             int intervalMinutes = _binanceService.GetIntervalInMinutes(interval);
             DateTime warmUpStartTime = startTime.AddMinutes(-1 * WarmUpCandlesCount * intervalMinutes);
 
             var rawData = await _binanceService.GetFullHistoryDataAsync(pair, interval, warmUpStartTime, endTime);
             var historyData = rawData.ToList();
-            _logger.LogInformation("Historical candles loaded. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, Candles: {CandleCount}", strategy.Id, strategy.Asset, strategy.Timeframe, historyData.Count);
+            _logger.LogInformation(
+                "Historical candles loaded. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, Candles: {CandleCount}",
+                strategy.Id, strategy.Asset, strategy.Timeframe, historyData.Count);
 
             int simulationStartIndex = GetSimulationStartIndex(historyData, startTime);
             var oscKeys = GetOscillatorKeys();
             var maKeys = GetMovingAverageKeys();
 
-            _logger.LogInformation("Indicator pre-calculation started. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, SimulationStartIndex: {SimulationStartIndex}, Candles: {CandleCount}", strategy.Id, strategy.Asset, strategy.Timeframe, simulationStartIndex, historyData.Count);
+            _logger.LogInformation(
+                "Indicator pre-calculation started. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, SimulationStartIndex: {SimulationStartIndex}, Candles: {CandleCount}",
+                strategy.Id, strategy.Asset, strategy.Timeframe, simulationStartIndex, historyData.Count);
             var fastCache = BuildCandleSnapshots(historyData, simulationStartIndex, oscKeys, maKeys);
-            _logger.LogInformation("Indicator pre-calculation finished. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}", strategy.Id, strategy.Asset, strategy.Timeframe);
+            _logger.LogInformation(
+                "Indicator pre-calculation finished. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}",
+                strategy.Id, strategy.Asset, strategy.Timeframe);
 
             decimal[] oscWeightsArr = new decimal[11];
             decimal[] maWeightsArr = new decimal[13];
-            var oscWeights = useDefaultStrategy ? GetDefaultOscillatorWeights() : config?.Oscillators ?? GetDefaultOscillatorWeights();
-            var maWeights = useDefaultStrategy ? GetDefaultMovingAverageWeights() : config?.MAs ?? GetDefaultMovingAverageWeights();
+            var oscWeights = useDefaultStrategy
+                ? GetDefaultOscillatorWeights()
+                : config?.Oscillators ?? GetDefaultOscillatorWeights();
+            var maWeights = useDefaultStrategy
+                ? GetDefaultMovingAverageWeights()
+                : config?.MAs ?? GetDefaultMovingAverageWeights();
 
             for (int j = 0; j < 11; j++) oscWeightsArr[j] = oscWeights.GetValueOrDefault(oscKeys[j], 0);
             for (int j = 0; j < 13; j++) maWeightsArr[j] = maWeights.GetValueOrDefault(maKeys[j], 0);
@@ -184,7 +345,9 @@ namespace TechnicalAnalysis.Domain.Services
                 else if (config?.TakeProfit > 0) takeProfit = config.TakeProfit;
             }
 
-            _logger.LogInformation("Simulation started. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, UseDefaultStrategy: {UseDefaultStrategy}", strategy.Id, strategy.Asset, strategy.Timeframe, useDefaultStrategy);
+            _logger.LogInformation(
+                "Simulation started. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, UseDefaultStrategy: {UseDefaultStrategy}",
+                strategy.Id, strategy.Asset, strategy.Timeframe, useDefaultStrategy);
 
             var result = BacktestEngine.Run(
                 fastCache,
@@ -201,7 +364,10 @@ namespace TechnicalAnalysis.Domain.Services
                     takeProfit),
                 trackTrades: true);
 
-            _logger.LogInformation("Simulation finished. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, FinalBalance: {FinalBalance}, ProfitPercentage: {ProfitPercentage}, Trades: {Trades}", strategy.Id, strategy.Asset, strategy.Timeframe, result.FinalBalance, result.ProfitPercentage, result.TotalTrades);
+            _logger.LogInformation(
+                "Simulation finished. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, FinalBalance: {FinalBalance}, ProfitPercentage: {ProfitPercentage}, Trades: {Trades}",
+                strategy.Id, strategy.Asset, strategy.Timeframe, result.FinalBalance, result.ProfitPercentage,
+                result.TotalTrades);
 
             return result;
         }
@@ -209,7 +375,8 @@ namespace TechnicalAnalysis.Domain.Services
         /// <summary>
         /// Запускает боевой тест стратегии ИИ из базы данных (ActiveStrategies) для построения графика в UI
         /// </summary>
-        public async Task<BacktestResult> RunAITestAsync(CurrencyPair pair, KlineInterval interval, DateTime startTime, DateTime endTime, decimal initialDeposit)
+        public async Task<BacktestResult> RunAITestAsync(CurrencyPair pair, KlineInterval interval, DateTime startTime,
+            DateTime endTime, decimal initialDeposit)
         {
             ValidateBacktestRequest(startTime, endTime, initialDeposit);
 
@@ -218,7 +385,8 @@ namespace TechnicalAnalysis.Domain.Services
                 .FirstOrDefaultAsync(s => s.Asset == pair.ToString() && s.Timeframe == interval.ToString());
 
             if (strategy == null)
-                throw new InvalidOperationException($"Нет обученной ИИ-стратегии для {pair} {interval}. Сначала запустите глобальную оптимизацию.");
+                throw new InvalidOperationException(
+                    $"Нет обученной ИИ-стратегии для {pair} {interval}. Сначала запустите глобальную оптимизацию.");
 
             var config = JsonConvert.DeserializeObject<WeightsJsonSchema>(strategy.IndicatorWeightsJson);
 
@@ -264,7 +432,8 @@ namespace TechnicalAnalysis.Domain.Services
             return result;
         }
 
-        public async Task<List<BacktestResult>> RunOptimizationAsync(CurrencyPair pair, DateTime startDate, DateTime endDate, decimal initialDeposit)
+        public async Task<List<BacktestResult>> RunOptimizationAsync(CurrencyPair pair, DateTime startDate,
+            DateTime endDate, decimal initialDeposit)
         {
             ValidateBacktestRequest(startDate, endDate, initialDeposit);
 
@@ -326,7 +495,8 @@ namespace TechnicalAnalysis.Domain.Services
                     DateTime warmUpStartTime = startDate.AddMinutes(-1 * WarmUpCandlesCount * intervalMinutes);
 
                     Console.WriteLine($"Fetching data for {interval}...");
-                    var rawData = await _binanceService.GetFullHistoryDataAsync(pair, interval, warmUpStartTime, endDate);
+                    var rawData =
+                        await _binanceService.GetFullHistoryDataAsync(pair, interval, warmUpStartTime, endDate);
                     var historyData = rawData.ToList();
 
                     if (historyData.Count < WarmUpCandlesCount)
@@ -339,132 +509,136 @@ namespace TechnicalAnalysis.Domain.Services
                     int simulationStartIndex = GetSimulationStartIndex(historyData, startDate);
 
                     // === 1. ПРЕДРАСЧЕТ ИНДИКАТОРОВ (КЭШИРОВАНИЕ) ===
-                    Console.WriteLine($"[{pair}] Pre-calculating indicators for {historyData.Count - simulationStartIndex} candles...");
+                    Console.WriteLine(
+                        $"[{pair}] Pre-calculating indicators for {historyData.Count - simulationStartIndex} candles...");
                     var fastCache = BuildCandleSnapshots(historyData, simulationStartIndex, oscKeys, maKeys);
                     Console.WriteLine($"[{pair}] ({interval}) Pre-calculation FINISHED!");
 
                     // === 2. СВЕРХБЫСТРОЕ ПАРАЛЛЕЛЬНОЕ ТЕСТИРОВАНИЕ КОМБИНАЦИЙ ===
-                    Console.WriteLine($"Testing {combinationsToTest} remaining combinations in parallel for {interval}...");
+                    Console.WriteLine(
+                        $"Testing {combinationsToTest} remaining combinations in parallel for {interval}...");
                     var runsToSave = new ConcurrentBag<OptimizationRun>();
                     var concurrentResults = new ConcurrentBag<BacktestResult>();
 
-                    Parallel.For(0, combinationsToTest, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 4) }, i =>
-                    {
-                        var rnd = new Random(Guid.NewGuid().GetHashCode());
-                        string combinedWeightsJson;
-                        var candidateOrdinal = existingCombinationCount + i;
-
-                        decimal[] oscWeightsArr = new decimal[11];
-                        decimal[] maWeightsArr = new decimal[13];
-                        int buyThreshold, sellThreshold;
-                        decimal stopLossPct, takeProfitPct;
-                        decimal oscGroupWeight, maGroupWeight;
-
-                        while (true)
+                    Parallel.For(0, combinationsToTest,
+                        new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 4) },
+                        i =>
                         {
-                            Dictionary<string, decimal> oscDict;
-                            Dictionary<string, decimal> maDict;
+                            var rnd = new Random(Guid.NewGuid().GetHashCode());
+                            string combinedWeightsJson;
+                            var candidateOrdinal = existingCombinationCount + i;
 
-                            if (candidateOrdinal == 0)
+                            decimal[] oscWeightsArr = new decimal[11];
+                            decimal[] maWeightsArr = new decimal[13];
+                            int buyThreshold, sellThreshold;
+                            decimal stopLossPct, takeProfitPct;
+                            decimal oscGroupWeight, maGroupWeight;
+
+                            while (true)
                             {
-                                // ЕТАЛОН 1: Класичний трейдинг (людська логіка)
-                                oscDict = GetDefaultOscillatorWeights();
-                                maDict = GetDefaultMovingAverageWeights();
-                                buyThreshold = 30;
-                                sellThreshold = -30;
-                                stopLossPct = 0.05m;
-                                takeProfitPct = 0.10m;
-                                oscGroupWeight = 0.5m;
-                                maGroupWeight = 0.5m;
-                            }
-                            else if (candidateOrdinal == 1)
-                            {
-                                // ЕТАЛОН 2: Динамічний Победитель від ІА
-                                var aiBenchmark = GetAIBenchmark(interval);
-                                oscDict = aiBenchmark.OscWeights;
-                                maDict = aiBenchmark.MaWeights;
-                                buyThreshold = aiBenchmark.BuyThreshold;
-                                sellThreshold = aiBenchmark.SellThreshold;
-                                stopLossPct = aiBenchmark.StopLoss;
-                                takeProfitPct = aiBenchmark.TakeProfit;
-                                oscGroupWeight = 0.5m; // Дефолт для старых эталонов
-                                maGroupWeight = 0.5m;
-                            }
-                            else
-                            {
-                                // СЛУЧАЙНАЯ ГЕНЕРАЦИЯ (ДЛЯ ML)
-                                oscDict = GenerateRandomWeights(oscKeys, rnd);
-                                maDict = GenerateRandomWeights(maKeys, rnd);
-                                buyThreshold = rnd.Next(10, 60);
-                                sellThreshold = rnd.Next(-60, -10);
-                                stopLossPct = (decimal)(rnd.NextDouble() * 0.04 + 0.01);
-                                takeProfitPct = (decimal)(rnd.NextDouble() * 0.13 + 0.02);
-                                oscGroupWeight = (decimal)rnd.NextDouble();
-                                maGroupWeight = 1.0m - oscGroupWeight;
+                                Dictionary<string, decimal> oscDict;
+                                Dictionary<string, decimal> maDict;
+
+                                if (candidateOrdinal == 0)
+                                {
+                                    // ЕТАЛОН 1: Класичний трейдинг (людська логіка)
+                                    oscDict = GetDefaultOscillatorWeights();
+                                    maDict = GetDefaultMovingAverageWeights();
+                                    buyThreshold = 30;
+                                    sellThreshold = -30;
+                                    stopLossPct = 0.05m;
+                                    takeProfitPct = 0.10m;
+                                    oscGroupWeight = 0.5m;
+                                    maGroupWeight = 0.5m;
+                                }
+                                else if (candidateOrdinal == 1)
+                                {
+                                    // ЕТАЛОН 2: Динамічний Победитель від ІА
+                                    var aiBenchmark = GetAIBenchmark(interval);
+                                    oscDict = aiBenchmark.OscWeights;
+                                    maDict = aiBenchmark.MaWeights;
+                                    buyThreshold = aiBenchmark.BuyThreshold;
+                                    sellThreshold = aiBenchmark.SellThreshold;
+                                    stopLossPct = aiBenchmark.StopLoss;
+                                    takeProfitPct = aiBenchmark.TakeProfit;
+                                    oscGroupWeight = 0.5m; // Дефолт для старых эталонов
+                                    maGroupWeight = 0.5m;
+                                }
+                                else
+                                {
+                                    // СЛУЧАЙНАЯ ГЕНЕРАЦИЯ (ДЛЯ ML)
+                                    oscDict = GenerateRandomWeights(oscKeys, rnd);
+                                    maDict = GenerateRandomWeights(maKeys, rnd);
+                                    buyThreshold = rnd.Next(10, 60);
+                                    sellThreshold = rnd.Next(-60, -10);
+                                    stopLossPct = (decimal)(rnd.NextDouble() * 0.04 + 0.01);
+                                    takeProfitPct = (decimal)(rnd.NextDouble() * 0.13 + 0.02);
+                                    oscGroupWeight = (decimal)rnd.NextDouble();
+                                    maGroupWeight = 1.0m - oscGroupWeight;
+                                }
+
+                                for (int j = 0; j < 11; j++) oscWeightsArr[j] = oscDict[oscKeys[j]];
+                                for (int j = 0; j < 13; j++) maWeightsArr[j] = maDict[maKeys[j]];
+
+                                var combined = new
+                                {
+                                    OscillatorGroupWeight = oscGroupWeight,
+                                    MaGroupWeight = maGroupWeight,
+                                    Oscillators = oscDict,
+                                    MAs = maDict,
+                                    BuyThreshold = buyThreshold,
+                                    SellThreshold = sellThreshold,
+                                    StopLoss = stopLossPct,
+                                    TakeProfit = takeProfitPct
+                                };
+                                combinedWeightsJson = JsonConvert.SerializeObject(combined);
+
+                                var combinationKey = GetOptimizationCombinationKey(
+                                    pair.ToString(),
+                                    interval.ToString(),
+                                    combinedWeightsJson);
+
+                                if (testedCombinations.TryAdd(combinationKey, 1))
+                                {
+                                    break;
+                                }
+
+                                // A benchmark may already exist in an unusual partial dataset.
+                                // Fall back to a random candidate so the target count is still reached.
+                                candidateOrdinal = 2;
                             }
 
-                            for (int j = 0; j < 11; j++) oscWeightsArr[j] = oscDict[oscKeys[j]];
-                            for (int j = 0; j < 13; j++) maWeightsArr[j] = maDict[maKeys[j]];
+                            // Запускаем симуляцию
+                            var result = BacktestEngine.Run(
+                                fastCache,
+                                simulationStartIndex,
+                                initialDeposit,
+                                CreateBacktestSettings(
+                                    oscWeightsArr,
+                                    maWeightsArr,
+                                    oscGroupWeight,
+                                    maGroupWeight,
+                                    buyThreshold,
+                                    sellThreshold,
+                                    stopLossPct,
+                                    takeProfitPct),
+                                trackTrades: false);
 
-                            var combined = new
+                            var runRecord = new OptimizationRun
                             {
-                                OscillatorGroupWeight = oscGroupWeight,
-                                MaGroupWeight = maGroupWeight,
-                                Oscillators = oscDict,
-                                MAs = maDict,
-                                BuyThreshold = buyThreshold,
-                                SellThreshold = sellThreshold,
-                                StopLoss = stopLossPct,
-                                TakeProfit = takeProfitPct
+                                Timeframe = interval.ToString(),
+                                Asset = pair.ToString(),
+                                IndicatorWeightsJson = combinedWeightsJson,
+                                TotalProfitPercent = result.ProfitPercentage,
+                                TotalTrades = result.TotalTrades,
+                                WinningTrades = result.WinningTrades,
+                                MaxDrawdown = result.MaxDrawdown,
+                                RunDate = DateTime.UtcNow
                             };
-                            combinedWeightsJson = JsonConvert.SerializeObject(combined);
 
-                            var combinationKey = GetOptimizationCombinationKey(
-                                pair.ToString(),
-                                interval.ToString(),
-                                combinedWeightsJson);
-
-                            if (testedCombinations.TryAdd(combinationKey, 1))
-                            {
-                                break;
-                            }
-
-                            // A benchmark may already exist in an unusual partial dataset.
-                            // Fall back to a random candidate so the target count is still reached.
-                            candidateOrdinal = 2;
-                        }
-
-                        // Запускаем симуляцию
-                        var result = BacktestEngine.Run(
-                            fastCache,
-                            simulationStartIndex,
-                            initialDeposit,
-                            CreateBacktestSettings(
-                                oscWeightsArr,
-                                maWeightsArr,
-                                oscGroupWeight,
-                                maGroupWeight,
-                                buyThreshold,
-                                sellThreshold,
-                                stopLossPct,
-                                takeProfitPct),
-                            trackTrades: false);
-
-                        var runRecord = new OptimizationRun
-                        {
-                            Timeframe = interval.ToString(),
-                            Asset = pair.ToString(),
-                            IndicatorWeightsJson = combinedWeightsJson,
-                            TotalProfitPercent = result.ProfitPercentage,
-                            TotalTrades = result.TotalTrades,
-                            WinningTrades = result.WinningTrades,
-                            MaxDrawdown = result.MaxDrawdown,
-                            RunDate = DateTime.UtcNow
-                        };
-
-                        runsToSave.Add(runRecord);
-                        concurrentResults.Add(result);
-                    });
+                            runsToSave.Add(runRecord);
+                            concurrentResults.Add(result);
+                        });
 
                     // === 3. МАССОВОЕ СОХРАНЕНИЕ ===
                     _dbContext.OptimizationRuns.AddRange(runsToSave);
@@ -506,7 +680,8 @@ namespace TechnicalAnalysis.Domain.Services
         }
 
         // Одиночный запуск (старый)
-        public async Task<BacktestResult> RunBacktestAsync(CurrencyPair pair, DateTime startTime, DateTime endTime, decimal initialDeposit, KlineInterval interval)
+        public async Task<BacktestResult> RunBacktestAsync(CurrencyPair pair, DateTime startTime, DateTime endTime,
+            decimal initialDeposit, KlineInterval interval)
         {
             ValidateBacktestRequest(startTime, endTime, initialDeposit);
 
@@ -600,7 +775,8 @@ namespace TechnicalAnalysis.Domain.Services
                 TradeAction.Buy => 1m,
                 TradeAction.Sell => -1m,
                 TradeAction.Neutral => 0m,
-                null => throw new InvalidOperationException($"Indicator '{indicatorName}' is missing from analysis result."),
+                null => throw new InvalidOperationException(
+                    $"Indicator '{indicatorName}' is missing from analysis result."),
                 _ => 0m
             };
         }
@@ -622,9 +798,11 @@ namespace TechnicalAnalysis.Domain.Services
             if (simulationStartIndex < 0)
                 throw new InvalidOperationException("Historical data does not contain the requested start time.");
             if (simulationStartIndex < 250)
-                throw new InvalidOperationException("At least 250 warm-up candles are required before the simulation start.");
+                throw new InvalidOperationException(
+                    "At least 250 warm-up candles are required before the simulation start.");
             if (simulationStartIndex >= historyData.Count - 1)
-                throw new InvalidOperationException("Historical data does not contain candles after the simulation start.");
+                throw new InvalidOperationException(
+                    "Historical data does not contain candles after the simulation start.");
 
             return simulationStartIndex;
         }
@@ -674,7 +852,8 @@ namespace TechnicalAnalysis.Domain.Services
             }
         }
 
-        private (Dictionary<string, decimal> OscWeights, Dictionary<string, decimal> MaWeights, int BuyThreshold, int SellThreshold, decimal StopLoss, decimal TakeProfit) GetAIBenchmark(KlineInterval interval)
+        private (Dictionary<string, decimal> OscWeights, Dictionary<string, decimal> MaWeights, int BuyThreshold, int
+            SellThreshold, decimal StopLoss, decimal TakeProfit) GetAIBenchmark(KlineInterval interval)
         {
             var oscWeights = GetDefaultOscillatorWeights();
             var maWeights = GetDefaultMovingAverageWeights();
@@ -685,39 +864,88 @@ namespace TechnicalAnalysis.Domain.Services
             switch (interval)
             {
                 case KlineInterval.FourHour:
-                    buyThresh = 58; sellThresh = -11; sl = 0.0225m; tp = 0.1341m;
-                    oscWeights["RSI"] = 0.223m; oscWeights["MACD"] = 0.036m; oscWeights["CCI"] = 0.150m;
-                    maWeights["SMA(200)"] = 0.001m; maWeights["EMA(200)"] = 0.126m; maWeights["HMA(9)"] = 0.026m;
+                    buyThresh = 58;
+                    sellThresh = -11;
+                    sl = 0.0225m;
+                    tp = 0.1341m;
+                    oscWeights["RSI"] = 0.223m;
+                    oscWeights["MACD"] = 0.036m;
+                    oscWeights["CCI"] = 0.150m;
+                    maWeights["SMA(200)"] = 0.001m;
+                    maWeights["EMA(200)"] = 0.126m;
+                    maWeights["HMA(9)"] = 0.026m;
                     break;
                 case KlineInterval.OneDay:
-                    buyThresh = 10; sellThresh = -46; sl = 0.0440m; tp = 0.1084m;
-                    oscWeights["RSI"] = 0.150m; oscWeights["MACD"] = 0.153m; oscWeights["CCI"] = 0.034m;
-                    maWeights["SMA(200)"] = 0.188m; maWeights["EMA(200)"] = 0.042m; maWeights["HMA(9)"] = 0.051m;
+                    buyThresh = 10;
+                    sellThresh = -46;
+                    sl = 0.0440m;
+                    tp = 0.1084m;
+                    oscWeights["RSI"] = 0.150m;
+                    oscWeights["MACD"] = 0.153m;
+                    oscWeights["CCI"] = 0.034m;
+                    maWeights["SMA(200)"] = 0.188m;
+                    maWeights["EMA(200)"] = 0.042m;
+                    maWeights["HMA(9)"] = 0.051m;
                     break;
                 case KlineInterval.ThirtyMinutes:
-                    buyThresh = 58; sellThresh = -57; sl = 0.0295m; tp = 0.1245m;
-                    oscWeights["RSI"] = 0.103m; oscWeights["MACD"] = 0.133m; oscWeights["CCI"] = 0.153m;
-                    maWeights["SMA(200)"] = 0.004m; maWeights["EMA(200)"] = 0.091m; maWeights["HMA(9)"] = 0.082m;
+                    buyThresh = 58;
+                    sellThresh = -57;
+                    sl = 0.0295m;
+                    tp = 0.1245m;
+                    oscWeights["RSI"] = 0.103m;
+                    oscWeights["MACD"] = 0.133m;
+                    oscWeights["CCI"] = 0.153m;
+                    maWeights["SMA(200)"] = 0.004m;
+                    maWeights["EMA(200)"] = 0.091m;
+                    maWeights["HMA(9)"] = 0.082m;
                     break;
                 case KlineInterval.OneHour:
-                    buyThresh = 58; sellThresh = -48; sl = 0.0165m; tp = 0.0229m;
-                    oscWeights["RSI"] = 0.107m; oscWeights["MACD"] = 0.058m; oscWeights["CCI"] = 0.124m;
-                    maWeights["SMA(200)"] = 0.092m; maWeights["EMA(200)"] = 0.001m; maWeights["HMA(9)"] = 0.123m;
+                    buyThresh = 58;
+                    sellThresh = -48;
+                    sl = 0.0165m;
+                    tp = 0.0229m;
+                    oscWeights["RSI"] = 0.107m;
+                    oscWeights["MACD"] = 0.058m;
+                    oscWeights["CCI"] = 0.124m;
+                    maWeights["SMA(200)"] = 0.092m;
+                    maWeights["EMA(200)"] = 0.001m;
+                    maWeights["HMA(9)"] = 0.123m;
                     break;
                 case KlineInterval.FifteenMinutes:
-                    buyThresh = 55; sellThresh = -47; sl = 0.0414m; tp = 0.1461m;
-                    oscWeights["RSI"] = 0.162m; oscWeights["MACD"] = 0.003m; oscWeights["CCI"] = 0.161m;
-                    maWeights["SMA(200)"] = 0.069m; maWeights["EMA(200)"] = 0.200m; maWeights["HMA(9)"] = 0.060m;
+                    buyThresh = 55;
+                    sellThresh = -47;
+                    sl = 0.0414m;
+                    tp = 0.1461m;
+                    oscWeights["RSI"] = 0.162m;
+                    oscWeights["MACD"] = 0.003m;
+                    oscWeights["CCI"] = 0.161m;
+                    maWeights["SMA(200)"] = 0.069m;
+                    maWeights["EMA(200)"] = 0.200m;
+                    maWeights["HMA(9)"] = 0.060m;
                     break;
                 case KlineInterval.FiveMinutes:
-                    buyThresh = 53; sellThresh = -35; sl = 0.0392m; tp = 0.0419m;
-                    oscWeights["RSI"] = 0.231m; oscWeights["MACD"] = 0.025m; oscWeights["CCI"] = 0.131m;
-                    maWeights["SMA(200)"] = 0.081m; maWeights["EMA(200)"] = 0.155m; maWeights["HMA(9)"] = 0.151m;
+                    buyThresh = 53;
+                    sellThresh = -35;
+                    sl = 0.0392m;
+                    tp = 0.0419m;
+                    oscWeights["RSI"] = 0.231m;
+                    oscWeights["MACD"] = 0.025m;
+                    oscWeights["CCI"] = 0.131m;
+                    maWeights["SMA(200)"] = 0.081m;
+                    maWeights["EMA(200)"] = 0.155m;
+                    maWeights["HMA(9)"] = 0.151m;
                     break;
                 case KlineInterval.OneMinute:
-                    buyThresh = 59; sellThresh = -52; sl = 0.0271m; tp = 0.1039m;
-                    oscWeights["RSI"] = 0.001m; oscWeights["MACD"] = 0.070m; oscWeights["CCI"] = 0.035m;
-                    maWeights["SMA(200)"] = 0.107m; maWeights["EMA(200)"] = 0.074m; maWeights["HMA(9)"] = 0.116m;
+                    buyThresh = 59;
+                    sellThresh = -52;
+                    sl = 0.0271m;
+                    tp = 0.1039m;
+                    oscWeights["RSI"] = 0.001m;
+                    oscWeights["MACD"] = 0.070m;
+                    oscWeights["CCI"] = 0.035m;
+                    maWeights["SMA(200)"] = 0.107m;
+                    maWeights["EMA(200)"] = 0.074m;
+                    maWeights["HMA(9)"] = 0.116m;
                     break;
             }
 
@@ -734,8 +962,17 @@ namespace TechnicalAnalysis.Domain.Services
             return rawWeights.ToDictionary(x => x.Key, x => x.Value / (sum == 0 ? 1 : sum));
         }
 
-        private string[] GetOscillatorKeys() => new[] { "RSI", "StochasticK", "CCI", "ADX", "AO", "Momentum", "MACD", "UltimateOscillator", "Williams%R", "BullBearPower", "StochasticRSI" };
-        private string[] GetMovingAverageKeys() => new[] { "SMA(10)", "EMA(10)", "SMA(20)", "EMA(20)", "SMA(30)", "EMA(30)", "SMA(50)", "EMA(50)", "SMA(100)", "EMA(100)", "SMA(200)", "EMA(200)", "HMA(9)" };
+        private string[] GetOscillatorKeys() => new[]
+        {
+            "RSI", "StochasticK", "CCI", "ADX", "AO", "Momentum", "MACD", "UltimateOscillator", "Williams%R",
+            "BullBearPower", "StochasticRSI"
+        };
+
+        private string[] GetMovingAverageKeys() => new[]
+        {
+            "SMA(10)", "EMA(10)", "SMA(20)", "EMA(20)", "SMA(30)", "EMA(30)", "SMA(50)", "EMA(50)", "SMA(100)",
+            "EMA(100)", "SMA(200)", "EMA(200)", "HMA(9)"
+        };
 
         private Dictionary<string, decimal> GetDefaultOscillatorWeights() => new Dictionary<string, decimal>
         {
@@ -746,10 +983,10 @@ namespace TechnicalAnalysis.Domain.Services
 
         private Dictionary<string, decimal> GetDefaultMovingAverageWeights() => new Dictionary<string, decimal>
         {
-            {"SMA(10)", 0.05m}, {"EMA(10)", 0.1m}, {"SMA(20)", 0.05m}, {"EMA(20)", 0.1m},
-            {"SMA(30)", 0.05m}, {"EMA(30)", 0.1m}, {"SMA(50)", 0.05m}, {"EMA(50)", 0.1m},
-            {"SMA(100)", 0.1m}, {"EMA(100)", 0.1m}, {"SMA(200)", 0.05m}, {"EMA(200)", 0.05m},
-            {"HMA(9)", 0.1m}
+            { "SMA(10)", 0.05m }, { "EMA(10)", 0.1m }, { "SMA(20)", 0.05m }, { "EMA(20)", 0.1m },
+            { "SMA(30)", 0.05m }, { "EMA(30)", 0.1m }, { "SMA(50)", 0.05m }, { "EMA(50)", 0.1m },
+            { "SMA(100)", 0.1m }, { "EMA(100)", 0.1m }, { "SMA(200)", 0.05m }, { "EMA(200)", 0.05m },
+            { "HMA(9)", 0.1m }
         };
     }
 }

@@ -65,6 +65,33 @@ public class OptimizationAndMachineLearningTests
     }
 
     [Fact]
+    public void CalculateRiskAdjustedScore_PenalizesDrawdownAndTooFewTrades()
+    {
+        var run = CreateRun(1, CreateValidWeightsJson());
+        run.TotalProfitPercent = 40m;
+        run.MaxDrawdown = 10m;
+        run.TotalTrades = 20;
+
+        var score = MachineLearningService.CalculateRiskAdjustedScore(run);
+
+        score.Should().Be(22.5f);
+    }
+
+    [Fact]
+    public void CreateTrainingInputs_UsesRiskAdjustedScoreAsLabel()
+    {
+        var run = CreateRun(1, CreateValidWeightsJson());
+        run.TotalProfitPercent = 20m;
+        run.MaxDrawdown = 4m;
+        run.TotalTrades = 30;
+
+        var inputs = MachineLearningService.CreateTrainingInputs(new[] { run }, out _);
+
+        inputs.Should().ContainSingle();
+        inputs[0].RiskAdjustedScore.Should().Be(14f);
+    }
+
+    [Fact]
     public async Task TrainModel_CountsOnlySuccessfullyParsedRuns()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -108,7 +135,7 @@ public class OptimizationAndMachineLearningTests
         Asset = "BTCUSDT",
         Timeframe = "OneHour",
         IndicatorWeightsJson = weightsJson,
-        TotalTrades = 1,
+        TotalTrades = MachineLearningService.MinimumTrainingTrades,
         TotalProfitPercent = 5m
     };
 
