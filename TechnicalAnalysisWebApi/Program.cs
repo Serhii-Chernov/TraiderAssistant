@@ -27,6 +27,7 @@ builder.Services.AddSingleton<BinanceService>();
 builder.Services.AddScoped<BacktestService>();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<MachineLearningService>();
+builder.Services.AddScoped<StrategyValidationService>();
 
 var app = builder.Build();
 

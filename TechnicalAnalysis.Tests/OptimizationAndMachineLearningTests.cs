@@ -77,6 +77,21 @@ public class OptimizationAndMachineLearningTests
         score.Should().Be(22.5f);
     }
 
+    [Theory]
+    [InlineData(0, -200f)]
+    [InlineData(1, -145f)]
+    [InlineData(9, -105f)]
+    public void CalculateRiskAdjustedScore_StronglyPenalizesInsufficientTrades(
+        int totalTrades,
+        float expectedScore)
+    {
+        var run = CreateRun(1, CreateValidWeightsJson());
+        run.TotalTrades = totalTrades;
+        run.TotalProfitPercent = 500m;
+
+        MachineLearningService.CalculateRiskAdjustedScore(run).Should().Be(expectedScore);
+    }
+
     [Fact]
     public void CreateTrainingInputs_UsesRiskAdjustedScoreAsLabel()
     {

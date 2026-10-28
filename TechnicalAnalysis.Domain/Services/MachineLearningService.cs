@@ -6,9 +6,9 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using TechnicalAnalysis.Domain.MLModels;
+using TechnicalAnalysis.Domain.Models;
 using TraiderAssistant.Infrastructure;
 using TraiderAssistant.Infrastructure.Entities;
 
@@ -61,192 +61,78 @@ namespace TechnicalAnalysis.Domain.Services
             _mlContext = new MLContext(seed: 42); // Фіксований seed для стабільності
         }
 
-        // 2. ВИКОРИСТАННЯ МОДЕЛІ ДЛЯ ПОШУКУ НАЙКРАЩИХ ПАРАМЕТРІВ
-        public async Task<string> FindBestStrategiesForAllTimeframes()
+        public async Task<StrategyCandidatePreview> GenerateCandidatePreviewAsync(
+            int candidatesPerStrategy = 20,
+            int searchCombinationsPerStrategy = 10000)
         {
-            if (!File.Exists(_modelPath)) return "Модель еще не обучена! Сначала вызовите TrainModel.";
+            if (!File.Exists(_modelPath))
+                throw new InvalidOperationException("Модель еще не обучена. Сначала вызовите TrainModel.");
+            if (candidatesPerStrategy <= 0 || candidatesPerStrategy > 100)
+                throw new ArgumentOutOfRangeException(nameof(candidatesPerStrategy), "Candidate count must be between 1 and 100.");
+            if (searchCombinationsPerStrategy < candidatesPerStrategy)
+                throw new ArgumentOutOfRangeException(nameof(searchCombinationsPerStrategy));
 
-            // Загружаем обученную модель
-            DataViewSchema modelSchema;
-            ITransformer trainedModel = _mlContext.Model.Load(_modelPath, out modelSchema);
-            var predEngine =
+            var trainedModel = _mlContext.Model.Load(_modelPath, out _);
+            var predictionEngine =
                 _mlContext.Model.CreatePredictionEngine<OptimizationInput, OptimizationPrediction>(trainedModel);
-
-            var rnd = new Random();
-            int combinationsToTry = 10000;
-
-            var strategyCombinations = await _dbContext.OptimizationRuns
-                .Where(r => r.TotalTrades >= MinimumTrainingTrades)
-                .Select(r => new { r.Asset, r.Timeframe })
+            var combinations = await _dbContext.OptimizationRuns
+                .Select(run => new { run.Asset, run.Timeframe })
                 .Distinct()
+                .OrderBy(run => run.Asset)
+                .ThenBy(run => run.Timeframe)
                 .ToListAsync();
 
-            if (strategyCombinations.Count == 0)
-                return "В базе данных нет успешных связок монета+таймфрейм для анализа.";
+            if (combinations.Count == 0)
+                throw new InvalidOperationException("В базе данных нет результатов оптимизации.");
 
-            var summaryResults = new Dictionary<string, (float Profit, OptimizationInput Strategy)>();
-
-            Console.WriteLine(
-                $"Запуск глобального ИИ-анализа. {combinationsToTry} комбинаций на каждую связку Монета+Таймфрейм...");
-
-            foreach (var combination in strategyCombinations)
+            var preview = new StrategyCandidatePreview
             {
-                OptimizationInput bestStrategy = null;
-                float bestPredictedScore = float.MinValue;
+                CandidatesPerStrategy = candidatesPerStrategy,
+                SearchCombinationsPerStrategy = searchCombinationsPerStrategy
+            };
+            var random = new Random(42);
 
-                for (int i = 0; i < combinationsToTry; i++)
+            foreach (var combination in combinations)
+            {
+                var bestCandidates = new List<PredictedStrategyCandidate>(candidatesPerStrategy + 1);
+                for (int index = 0; index < searchCombinationsPerStrategy; index++)
                 {
-                    var input = GenerateRandomInput(rnd, combination.Timeframe, combination.Asset);
-                    var prediction = predEngine.Predict(input);
-
-                    if (prediction.PredictedRiskAdjustedScore > bestPredictedScore)
+                    var parameters = GenerateRandomInput(random, combination.Timeframe, combination.Asset);
+                    var prediction = predictionEngine.Predict(parameters);
+                    bestCandidates.Add(new PredictedStrategyCandidate
                     {
-                        bestPredictedScore = prediction.PredictedRiskAdjustedScore;
-                        bestStrategy = input;
+                        Asset = combination.Asset,
+                        Timeframe = combination.Timeframe,
+                        PredictedScore = prediction.PredictedRiskAdjustedScore,
+                        Parameters = parameters
+                    });
+
+                    if (bestCandidates.Count > candidatesPerStrategy)
+                    {
+                        int worstIndex = 0;
+                        for (int candidateIndex = 1; candidateIndex < bestCandidates.Count; candidateIndex++)
+                        {
+                            if (bestCandidates[candidateIndex].PredictedScore < bestCandidates[worstIndex].PredictedScore)
+                                worstIndex = candidateIndex;
+                        }
+
+                        bestCandidates.RemoveAt(worstIndex);
                     }
                 }
 
-                string key = $"{combination.Asset} | {combination.Timeframe}";
-                summaryResults[key] = (bestPredictedScore, bestStrategy);
+                preview.Candidates.AddRange(bestCandidates.OrderByDescending(candidate => candidate.PredictedScore));
             }
 
-            // === АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ БОЕВОЙ БАЗЫ ДАННЫХ ===
-            Console.WriteLine("Сохранение точных результатов ИИ в базу данных...");
-
-            // 1. Удаляем старые стратегии
-            var oldStrategies = await _dbContext.ActiveStrategies.ToListAsync();
-            _dbContext.ActiveStrategies.RemoveRange(oldStrategies);
-
-            // 2. Формируем новые стратегии с абсолютной машинной точностью
-            // СТАЛО:
-            var newActiveStrategies = summaryResults.Select(r => r.Value).Select(entry =>
-            {
-                var strategy = entry.Strategy;
-                var weightsSchema = new WeightsJsonSchema
-                {
-                    OscillatorGroupWeight = (decimal)strategy.OscillatorGroupWeight,
-                    MaGroupWeight = (decimal)strategy.MaGroupWeight,
-
-                    Oscillators = new Dictionary<string, decimal>
-                    {
-                        { "RSI", (decimal)strategy.RsiWeight }, { "StochasticK", (decimal)strategy.StochasticKWeight },
-                        { "CCI", (decimal)strategy.CciWeight }, { "ADX", (decimal)strategy.AdxWeight },
-                        { "AO", (decimal)strategy.AoWeight }, { "Momentum", (decimal)strategy.MomentumWeight },
-                        { "MACD", (decimal)strategy.MacdWeight },
-                        { "UltimateOscillator", (decimal)strategy.UltimateWeight },
-                        { "Williams%R", (decimal)strategy.WilliamsRWeight },
-                        { "BullBearPower", (decimal)strategy.BullBearWeight },
-                        { "StochasticRSI", (decimal)strategy.StochasticRsiWeight }
-                    },
-
-                    MAs = new Dictionary<string, decimal>
-                    {
-                        { "SMA(10)", (decimal)strategy.Sma10Weight }, { "EMA(10)", (decimal)strategy.Ema10Weight },
-                        { "SMA(20)", (decimal)strategy.Sma20Weight }, { "EMA(20)", (decimal)strategy.Ema20Weight },
-                        { "SMA(30)", (decimal)strategy.Sma30Weight }, { "EMA(30)", (decimal)strategy.Ema30Weight },
-                        { "SMA(50)", (decimal)strategy.Sma50Weight }, { "EMA(50)", (decimal)strategy.Ema50Weight },
-                        { "SMA(100)", (decimal)strategy.Sma100Weight }, { "EMA(100)", (decimal)strategy.Ema100Weight },
-                        { "SMA(200)", (decimal)strategy.Sma200Weight }, { "EMA(200)", (decimal)strategy.Ema200Weight },
-                        { "HMA(9)", (decimal)strategy.Hma9Weight }
-                    },
-                    BuyThreshold = (int)strategy.BuyThreshold,
-                    SellThreshold = (int)strategy.SellThreshold,
-                    StopLoss = (decimal)strategy.StopLoss,
-                    TakeProfit = (decimal)strategy.TakeProfit
-                };
-
-                return new TraiderAssistant.Infrastructure.Entities.ActiveStrategy
-                {
-                    Asset = entry.Strategy.Asset,
-                    Timeframe = entry.Strategy.Timeframe,
-                    BuyThreshold = (int)strategy.BuyThreshold,
-                    SellThreshold = (int)strategy.SellThreshold,
-                    StopLoss = (decimal)strategy.StopLoss,
-                    TakeProfit = (decimal)strategy.TakeProfit,
-                    IndicatorWeightsJson = JsonConvert.SerializeObject(weightsSchema)
-                };
-            }).ToList();
-
-            await _dbContext.ActiveStrategies.AddRangeAsync(newActiveStrategies);
-            await _dbContext.SaveChangesAsync();
-            await _strategyProvider.LoadStrategiesFromDatabaseAsync();
-            Console.WriteLine("Боевые стратегии успешно обновлены!");
-
-            // Сортируем результаты от лучшего к худшему для красивого вывода в Swagger
-            var sortedResults = summaryResults.OrderByDescending(x => x.Value.Profit).ToList();
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine("=== ГЛОБАЛЬНЫЙ ОТЧЕТ ИИ ПО МОНЕТАМ И ТАЙМФРЕЙМАМ ===\n");
-            sb.AppendLine("[БОЕВЫЕ НАСТРОЙКИ УСПЕШНО ЗАГРУЖЕНЫ В БАЗУ ДАННЫХ]\n");
-
-            int rank = 1;
-            foreach (var result in sortedResults)
-            {
-                var key = result.Key;
-                var profit = result.Value.Profit;
-                var strategy = result.Value.Strategy;
-
-                sb.AppendLine($"[{rank}] {key}");
-                sb.AppendLine($"Максимальный ожидаемый risk-adjusted score: {profit:0.##}");
-                sb.AppendLine($"--- Настройки Риск-менеджмента ---");
-                sb.AppendLine(
-                    $"Buy > {strategy.BuyThreshold} | Sell < {strategy.SellThreshold} | StopLoss: {strategy.StopLoss:P} | TakeProfit: {strategy.TakeProfit:P}");
-
-                var oscDict = new Dictionary<string, float>
-                {
-                    { "RSI", strategy.RsiWeight }, { "Stoch", strategy.StochasticKWeight },
-                    { "CCI", strategy.CciWeight },
-                    { "ADX", strategy.AdxWeight }, { "AO", strategy.AoWeight }, { "Momentum", strategy.MomentumWeight },
-                    { "MACD", strategy.MacdWeight }, { "Ultimate", strategy.UltimateWeight },
-                    { "Will%R", strategy.WilliamsRWeight },
-                    { "BullBear", strategy.BullBearWeight }, { "StochRSI", strategy.StochasticRsiWeight }
-                };
-
-                var maDict = new Dictionary<string, float>
-                {
-                    { "SMA10", strategy.Sma10Weight }, { "EMA10", strategy.Ema10Weight },
-                    { "SMA20", strategy.Sma20Weight },
-                    { "EMA20", strategy.Ema20Weight }, { "SMA30", strategy.Sma30Weight },
-                    { "EMA30", strategy.Ema30Weight },
-                    { "SMA50", strategy.Sma50Weight }, { "EMA50", strategy.Ema50Weight },
-                    { "SMA100", strategy.Sma100Weight },
-                    { "EMA100", strategy.Ema100Weight }, { "SMA200", strategy.Sma200Weight },
-                    { "EMA200", strategy.Ema200Weight },
-                    { "HMA9", strategy.Hma9Weight }
-                };
-
-                var topOsc = oscDict.OrderByDescending(x => x.Value).Take(3).ToList();
-                var topMa = maDict.OrderByDescending(x => x.Value).Take(3).ToList();
-
-                sb.AppendLine($"--- Главные драйверы стратегии (ТОП-3) ---");
-                sb.AppendLine(
-                    $"Осцилляторы: {topOsc[0].Key} ({topOsc[0].Value:P1}) | {topOsc[1].Key} ({topOsc[1].Value:P1}) | {topOsc[2].Key} ({topOsc[2].Value:P1})");
-                sb.AppendLine(
-                    $"Трендовые:   {topMa[0].Key} ({topMa[0].Value:P1}) | {topMa[1].Key} ({topMa[1].Value:P1}) | {topMa[2].Key} ({topMa[2].Value:P1})");
-                sb.AppendLine("--------------------------------------------------\n");
-
-                rank++;
-            }
-
-            var bestOverall = sortedResults[0];
-            var worstOverall = sortedResults[sortedResults.Count - 1];
-
-            sb.AppendLine("=== ИТОГОВЫЙ ВЫВОД ИИ ===");
-            sb.AppendLine(
-                $"🏆 ЛУЧШИЙ КАНДИДАТ: '{bestOverall.Key}' имеет наивысший risk-adjusted score ({bestOverall.Value.Profit:0.##}).");
-            sb.AppendLine($"🛑 ХУДШИЙ КАНДИДАТ: '{worstOverall.Key}' имеет score {worstOverall.Value.Profit:0.##}.");
-            sb.AppendLine(
-                "Кандидаты должны пройти независимый forward-test; score не является прогнозом процента прибыли.");
-
-            return sb.ToString();
+            return preview;
         }
+
+        // 2. ВИКОРИСТАННЯ МОДЕЛІ ДЛЯ ПОШУКУ НАЙКРАЩИХ ПАРАМЕТРІВ
 
         public async Task<string> TrainModelAsync()
         {
             Console.WriteLine("Выгрузка всех успешных прогонов из БД...");
 
-            var runs = await _dbContext.OptimizationRuns
-                .Where(r => r.TotalTrades >= MinimumTrainingTrades)
-                .ToListAsync();
+            var runs = await _dbContext.OptimizationRuns.ToListAsync();
 
             var mlInputData = CreateTrainingInputs(runs, out var parsingErrors);
             foreach (var parsingError in parsingErrors)
@@ -317,9 +203,9 @@ namespace TechnicalAnalysis.Domain.Services
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"Глобальная risk-adjusted модель обучена на {mlInputData.Count} записях!");
             sb.AppendLine($"Поврежденных записей пропущено: {parsingErrors.Count}.");
-            sb.AppendLine($"Минимум сделок в обучающей записи: {MinimumTrainingTrades}.");
+            sb.AppendLine("В обучение включены прогоны с нулевым и малым числом сделок.");
             sb.AppendLine(
-                $"Label = Profit - {DrawdownPenaltyWeight:0.##} * MaxDrawdown - штраф за число сделок ниже {PreferredTrainingTrades}.");
+                $"Label = сильный штраф при < {MinimumTrainingTrades} сделок; иначе Profit - {DrawdownPenaltyWeight:0.##} * MaxDrawdown - штраф ниже {PreferredTrainingTrades} сделок.");
             sb.AppendLine($"R-Squared: {metrics.RSquared:0.####} | RMSE score: {metrics.RootMeanSquaredError:0.##}\n");
 
             sb.AppendLine("=== ТОП-10 САМЫХ ВАЖНЫХ ПАРАМЕТРОВ (PFI) ===");
@@ -421,6 +307,11 @@ namespace TechnicalAnalysis.Domain.Services
 
         internal static float CalculateRiskAdjustedScore(OptimizationRun run)
         {
+            if (run.TotalTrades == 0)
+                return -200f;
+            if (run.TotalTrades < MinimumTrainingTrades)
+                return (float)(-100m - 5m * (MinimumTrainingTrades - run.TotalTrades));
+
             int missingTrades = Math.Max(0, PreferredTrainingTrades - run.TotalTrades);
             decimal score = run.TotalProfitPercent
                             - DrawdownPenaltyWeight * run.MaxDrawdown
