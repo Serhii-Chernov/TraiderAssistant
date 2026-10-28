@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using TechnicalAnalysis.Domain;
 using TechnicalAnalysis.Domain.Services;
 using TraiderAssistant.Infrastructure;
@@ -31,6 +32,9 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.MigrateAsync();
+
     var strategyProvider = scope.ServiceProvider.GetRequiredService<StrategyProviderService>();
     await strategyProvider.LoadStrategiesFromDatabaseAsync();
 }
@@ -40,7 +44,10 @@ app.UseSwaggerUI();
 
 app.UseCors();
 
-app.UseHttpsRedirection();
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthorization();
 

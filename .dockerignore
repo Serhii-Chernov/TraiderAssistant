@@ -1,0 +1,16 @@
+.git
+.github
+.idea
+.vs
+**/bin
+**/obj
+**/.env
+instances
+TechnicalAnalysis.Tests
+TraiderAssistant.UI
+*.png
+*.xlsx
+*.zip
+*.log
+list.txt
+plot_results*.py

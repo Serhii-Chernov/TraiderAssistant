@@ -410,6 +410,11 @@ FodyWeavers.xsd
 /list.txt
 /plot_results*.py
 global_model.zip
+
+# Local Docker instance configuration and persistent data
+**/.env
+!**/.env.example
+/instances/trader-assistant/data/
 DocumentLayout.json
 /.vs/SkypeRecorder/v17
 /.vs

@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.ML;
 using Microsoft.ML.Data;
 using Newtonsoft.Json;
@@ -18,7 +19,7 @@ namespace TechnicalAnalysis.Domain.Services
         private readonly AppDbContext _dbContext;
         private readonly MLContext _mlContext;
         private readonly StrategyProviderService _strategyProvider;
-        private const string ModelPath = "global_model.zip";
+        private readonly string _modelPath;
 
         internal static readonly string[] FeatureColumnNames =
         {
@@ -37,21 +38,25 @@ namespace TechnicalAnalysis.Domain.Services
             nameof(OptimizationInput.OscillatorGroupWeight), nameof(OptimizationInput.MaGroupWeight)
         };
 
-        public MachineLearningService(AppDbContext dbContext, StrategyProviderService strategyProvider)
+        public MachineLearningService(
+            AppDbContext dbContext,
+            StrategyProviderService strategyProvider,
+            IConfiguration configuration = null)
         {
             _dbContext = dbContext;
             _strategyProvider = strategyProvider;
+            _modelPath = configuration?["MachineLearning:ModelPath"] ?? "global_model.zip";
             _mlContext = new MLContext(seed: 42); // Фіксований seed для стабільності
         }
 
         // 2. ВИКОРИСТАННЯ МОДЕЛІ ДЛЯ ПОШУКУ НАЙКРАЩИХ ПАРАМЕТРІВ
         public async Task<string> FindBestStrategiesForAllTimeframes()
         {
-            if (!File.Exists(ModelPath)) return "Модель еще не обучена! Сначала вызовите TrainModel.";
+            if (!File.Exists(_modelPath)) return "Модель еще не обучена! Сначала вызовите TrainModel.";
 
             // Загружаем обученную модель
             DataViewSchema modelSchema;
-            ITransformer trainedModel = _mlContext.Model.Load(ModelPath, out modelSchema);
+            ITransformer trainedModel = _mlContext.Model.Load(_modelPath, out modelSchema);
             var predEngine = _mlContext.Model.CreatePredictionEngine<OptimizationInput, OptimizationPrediction>(trainedModel);
 
             var rnd = new Random();
@@ -253,7 +258,9 @@ namespace TechnicalAnalysis.Domain.Services
 
             // 5. СОХРАНЯЕМ ПОЛНУЮ МОДЕЛЬ ДЛЯ ДРУГИХ МЕТОДОВ
             var fullModel = dataPrepModel.Append(predictor);
-            _mlContext.Model.Save(fullModel, dataView.Schema, ModelPath);
+            var modelDirectory = Path.GetDirectoryName(Path.GetFullPath(_modelPath));
+            Directory.CreateDirectory(modelDirectory!);
+            _mlContext.Model.Save(fullModel, dataView.Schema, _modelPath);
 
             // === ВЗЛАМЫВАЕМ МОЗГ ИИ (РАСЧЕТ PFI) ===
             Console.WriteLine("Оценка важности признаков (PFI) на тестовой выборке...");
