@@ -33,7 +33,8 @@ namespace TechnicalAnalysis.Domain
             if (meanDeviation == 0)
                 technicalAnalysisStruct.Value = 0;
             else
-                technicalAnalysisStruct.Value = (typicalPrices[typicalPrices.Count - 1] - sma) / (0.015m * meanDeviation);
+                technicalAnalysisStruct.Value =
+                    (typicalPrices[typicalPrices.Count - 1] - sma) / meanDeviation / 0.015m;
 
             technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
             return technicalAnalysisStruct;
