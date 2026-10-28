@@ -29,6 +29,7 @@ namespace TechnicalAnalysis.Tests.Integration
                 {
                     Asset = "BTCUSDT",
                     Timeframe = "OneDay",
+                    SelectionMethod = "WalkForward",
                     IndicatorWeightsJson = "{\"OscillatorGroupWeight\":0.6, \"MaGroupWeight\":0.4}"
                 });
                 context.SaveChanges();

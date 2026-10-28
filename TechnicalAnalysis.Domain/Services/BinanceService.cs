@@ -3,25 +3,42 @@ using Binance.Net.Clients;
 using Binance.Net.Enums;
 using Binance.Net.Objects.Models.Spot;
 using CryptoExchange.Net.Authentication;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using TechnicalAnalysis.Shared;
+using TechnicalAnalysis.Domain.Models;
 
 namespace TechnicalAnalysis.Domain
 {
     public class BinanceService
     {
         private readonly BinanceRestClient _client;
+        private readonly ILogger<BinanceService> _logger;
 
-        public BinanceService()
+        internal const decimal MaximumMissingCandlePercent = 0.5m;
+        internal static readonly TimeSpan MaximumIndividualGap = TimeSpan.FromHours(24);
+
+        public BinanceService() : this(null)
         {
+        }
+
+        public BinanceService(ILogger<BinanceService> logger)
+        {
+            _logger = logger;
             _client = new BinanceRestClient();
         }
 
         public async Task<List<BinanceSpotKline>> GetFullHistoryDataAsync(CurrencyPair currencyPair,
+            KlineInterval interval, DateTime startTime, DateTime endTime)
+        {
+            return (await GetFullHistoryDataBatchAsync(currencyPair, interval, startTime, endTime)).Candles;
+        }
+
+        internal async Task<HistoricalDataBatch> GetFullHistoryDataBatchAsync(CurrencyPair currencyPair,
             KlineInterval interval, DateTime startTime, DateTime endTime)
         {
             var allKlines = new ConcurrentBag<BinanceSpotKline>();
@@ -84,18 +101,94 @@ namespace TechnicalAnalysis.Domain
                 throw new InvalidOperationException(
                     $"Binance returned no closed candles for {currencyPair} {interval} [{startTime:O}, {endTime:O}).");
 
-            for (int index = 1; index < ordered.Count; index++)
+            var quality = AnalyzeDataQuality(
+                currencyPair.ToString(),
+                interval.ToString(),
+                ordered.Select(kline => kline.OpenTime).ToList(),
+                intervalSpan);
+            if (quality.MissingCandles > 0)
             {
-                DateTime expectedOpenTime = ordered[index - 1].OpenTime + intervalSpan;
-                if (ordered[index].OpenTime != expectedOpenTime)
-                {
-                    throw new InvalidOperationException(
-                        $"Historical data gap for {currencyPair} {interval}: expected {expectedOpenTime:O}, " +
-                        $"received {ordered[index].OpenTime:O}.");
-                }
+                _logger?.LogWarning(
+                    "Historical data contains acceptable gaps. Asset: {Asset}, Timeframe: {Timeframe}, MissingCandles: {MissingCandles}, MissingPercent: {MissingPercent}, MaximumGapCandles: {MaximumGapCandles}",
+                    quality.Asset,
+                    quality.Timeframe,
+                    quality.MissingCandles,
+                    quality.MissingPercent,
+                    quality.MaximumGapCandles);
             }
 
-            return ordered;
+            return new HistoricalDataBatch
+            {
+                Candles = ordered,
+                Quality = quality
+            };
+        }
+
+        internal static HistoricalDataQualityResult AnalyzeDataQuality(
+            string asset,
+            string timeframe,
+            IReadOnlyList<DateTime> openTimes,
+            TimeSpan interval)
+        {
+            if (openTimes == null || openTimes.Count == 0)
+                throw new ArgumentException("At least one candle open time is required.", nameof(openTimes));
+            if (interval <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(interval));
+
+            var result = new HistoricalDataQualityResult
+            {
+                Asset = asset,
+                Timeframe = timeframe,
+                ActualCandles = openTimes.Count
+            };
+
+            for (int index = 1; index < openTimes.Count; index++)
+            {
+                TimeSpan distance = openTimes[index] - openTimes[index - 1];
+                if (distance <= TimeSpan.Zero)
+                    throw new InvalidOperationException(
+                        $"Historical candles for {asset} {timeframe} are not strictly ordered at {openTimes[index]:O}.");
+                if (distance.Ticks % interval.Ticks != 0)
+                    throw new InvalidOperationException(
+                        $"Historical candle for {asset} {timeframe} is not aligned to the {interval} interval: " +
+                        $"{openTimes[index - 1]:O} -> {openTimes[index]:O}.");
+
+                int missingCandles = checked((int)(distance.Ticks / interval.Ticks) - 1);
+                if (missingCandles <= 0)
+                    continue;
+
+                TimeSpan missingDuration = TimeSpan.FromTicks(interval.Ticks * missingCandles);
+                if (missingDuration > MaximumIndividualGap)
+                {
+                    throw new InvalidOperationException(
+                        $"Historical data gap for {asset} {timeframe} exceeds {MaximumIndividualGap.TotalHours:0} hours: " +
+                        $"expected {openTimes[index - 1] + interval:O}, received {openTimes[index]:O}, " +
+                        $"missing {missingCandles} candles.");
+                }
+
+                result.MissingCandles += missingCandles;
+                result.MaximumGapCandles = Math.Max(result.MaximumGapCandles, missingCandles);
+                result.Gaps.Add(new HistoricalDataGap
+                {
+                    ExpectedOpenTime = openTimes[index - 1] + interval,
+                    ReceivedOpenTime = openTimes[index],
+                    MissingCandles = missingCandles
+                });
+            }
+
+            result.ExpectedCandles = result.ActualCandles + result.MissingCandles;
+            result.MissingPercent = result.ExpectedCandles == 0
+                ? 0m
+                : Math.Round((decimal)result.MissingCandles / result.ExpectedCandles * 100m, 4);
+            if (result.MissingPercent > MaximumMissingCandlePercent)
+            {
+                throw new InvalidOperationException(
+                    $"Historical data for {asset} {timeframe} is incomplete: " +
+                    $"{result.MissingCandles} of {result.ExpectedCandles} candles are missing " +
+                    $"({result.MissingPercent:0.####}%), limit is {MaximumMissingCandlePercent:0.####}%.");
+            }
+
+            return result;
         }
 
         public async Task<List<KlineData>> GetChartDataAsync(CurrencyPair currencyPair, DateTime startTime,
