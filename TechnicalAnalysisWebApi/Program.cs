@@ -16,8 +16,8 @@ builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
     {
         policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+            .AllowAnyMethod()
+            .AllowAnyHeader();
     });
 });
 
@@ -28,6 +28,7 @@ builder.Services.AddScoped<BacktestService>();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<MachineLearningService>();
 builder.Services.AddScoped<StrategyValidationService>();
+builder.Services.AddScoped<WalkForwardStrategyService>();
 
 var app = builder.Build();
 
@@ -57,4 +58,6 @@ app.MapControllers();
 app.Run();
 
 
-public partial class Program { }
+public partial class Program
+{
+}

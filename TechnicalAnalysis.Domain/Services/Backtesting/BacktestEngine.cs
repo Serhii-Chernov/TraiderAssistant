@@ -49,8 +49,9 @@ internal static class BacktestEngine
         PendingOrder pendingOrder = PendingOrder.None;
         var dailyClosingEquity = new SortedDictionary<DateTime, decimal>();
 
-        void ClosePosition(decimal exitPrice, DateTime exitTime, string tradeType)
+        void ClosePosition(decimal marketPrice, DateTime exitTime, string tradeType)
         {
+            decimal exitPrice = marketPrice * (1 - settings.Slippage);
             cashBalance = cryptoAmount * exitPrice * (1 - settings.TradingFee);
             cryptoAmount = 0m;
 
@@ -94,7 +95,7 @@ internal static class BacktestEngine
             // Orders are created only after the previous candle closes.
             if (pendingOrder == PendingOrder.Enter && cryptoAmount == 0m)
             {
-                entryPrice = candle.OpenPrice;
+                entryPrice = candle.OpenPrice * (1 + settings.Slippage);
                 entryTime = candle.OpenTime;
                 balanceBeforeTrade = cashBalance;
                 cryptoAmount = cashBalance / entryPrice * (1 - settings.TradingFee);
@@ -132,6 +133,18 @@ internal static class BacktestEngine
                 }
             }
 
+            // Observe the worst executable intrabar equity before a possible forced close at candle close.
+            if (cryptoAmount > 0m)
+            {
+                decimal intrabarEquity = cryptoAmount * Math.Min(candle.LowPrice, candle.ClosePrice) *
+                                         (1 - settings.Slippage) * (1 - settings.TradingFee);
+                decimal intrabarDrawdown = peakEquity == 0m
+                    ? 0m
+                    : (peakEquity - intrabarEquity) / peakEquity * 100m;
+                if (intrabarDrawdown > maxDrawdown)
+                    maxDrawdown = intrabarDrawdown;
+            }
+
             bool hasNextCandle = index < lastIndex;
             bool hasSignals = candle.OscillatorActions.Length == settings.OscillatorWeights.Length &&
                               candle.MovingAverageActions.Length == settings.MovingAverageWeights.Length;
@@ -148,21 +161,21 @@ internal static class BacktestEngine
 
             bool isLastCandle = index == lastIndex;
             if (isLastCandle && cryptoAmount > 0m)
-                ClosePosition(candle.ClosePrice, candle.OpenTime, "End of Test");
+                ClosePosition(candle.ClosePrice, candle.CloseTime, "End of Test");
 
-            decimal equity = cryptoAmount > 0m
+            decimal closingEquity = cryptoAmount > 0m
                 ? cryptoAmount * candle.ClosePrice * (1 - settings.TradingFee)
                 : cashBalance;
-
-            dailyClosingEquity[candle.OpenTime.Date] = equity;
-            if (equity > peakEquity)
-                peakEquity = equity;
+            dailyClosingEquity[candle.CloseTime.Date] = closingEquity;
 
             decimal drawdown = peakEquity == 0m
                 ? 0m
-                : (peakEquity - equity) / peakEquity * 100m;
+                : (peakEquity - closingEquity) / peakEquity * 100m;
             if (drawdown > maxDrawdown)
                 maxDrawdown = drawdown;
+
+            if (closingEquity > peakEquity)
+                peakEquity = closingEquity;
         }
 
         result.FinalBalance = cashBalance;
@@ -177,6 +190,8 @@ internal static class BacktestEngine
         else
             result.ProfitFactor = grossProfit > 0m ? decimal.MaxValue : 0m;
         result.SharpeRatio = CalculateAnnualizedSharpe(dailyClosingEquity.Values, initialDeposit);
+        result.GrossProfit = grossProfit;
+        result.GrossLoss = grossLoss;
 
         return result;
     }
@@ -297,5 +312,7 @@ internal static class BacktestEngine
             throw new ArgumentOutOfRangeException(nameof(settings), "Take profit must be positive.");
         if (settings.TradingFee < 0m || settings.TradingFee >= 1m)
             throw new ArgumentOutOfRangeException(nameof(settings), "Trading fee must be between zero and one.");
+        if (settings.Slippage < 0m || settings.Slippage >= 1m)
+            throw new ArgumentOutOfRangeException(nameof(settings), "Slippage must be between zero and one.");
     }
 }

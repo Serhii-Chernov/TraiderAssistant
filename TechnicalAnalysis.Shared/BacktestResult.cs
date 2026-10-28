@@ -20,5 +20,7 @@ namespace TechnicalAnalysis.Shared
 
         public decimal ProfitFactor { get; set; }
         public decimal SharpeRatio { get; set; }
+        public decimal GrossProfit { get; set; }
+        public decimal GrossLoss { get; set; }
     }
 }

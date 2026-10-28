@@ -119,6 +119,27 @@ public class BacktestEngineTests
         result.Trades[0].ProfitPercent.Should().Be(-0.1999m);
     }
 
+    [Fact]
+    public void Run_WithSlippage_ShouldUseAdverseEntryAndExitFills()
+    {
+        var candles = new[]
+        {
+            Candle(0, 100m, 100m, 100m, 100m, signal: 1m),
+            Candle(1, 100m, 100m, 100m, 100m)
+        };
+
+        var result = BacktestEngine.Run(
+            candles,
+            0,
+            1_000m,
+            Settings(fee: 0m) with { Slippage = 0.01m },
+            trackTrades: true);
+
+        result.Trades[0].EntryPrice.Should().Be(101m);
+        result.Trades[0].ExitPrice.Should().Be(99m);
+        result.FinalBalance.Should().BeApproximately(980.1980m, 0.0001m);
+    }
+
     /// <summary>
     /// Verifies that drawdown includes unrealized losses while a position is open.
     /// </summary>
@@ -142,6 +163,40 @@ public class BacktestEngineTests
 
         result.MaxDrawdown.Should().Be(50m);
         result.FinalBalance.Should().Be(1_000m);
+    }
+
+    [Fact]
+    public void Run_WithRecoveredIntrabarLoss_ShouldIncludeLowInDrawdown()
+    {
+        var candles = new[]
+        {
+            Candle(0, 100m, 100m, 100m, 100m, signal: 1m),
+            Candle(1, 100m, 100m, 80m, 100m)
+        };
+
+        var result = BacktestEngine.Run(
+            candles,
+            0,
+            1_000m,
+            Settings(fee: 0m, stopLoss: 0.50m),
+            trackTrades: true);
+
+        result.MaxDrawdown.Should().Be(20m);
+        result.FinalBalance.Should().Be(1_000m);
+    }
+
+    [Fact]
+    public void Run_WhenTestEnds_ShouldTimestampForcedExitAtCandleClose()
+    {
+        var candles = new[]
+        {
+            Candle(0, 100m, 100m, 100m, 100m, signal: 1m),
+            Candle(1, 100m, 100m, 100m, 100m)
+        };
+
+        var result = BacktestEngine.Run(candles, 0, 1_000m, Settings(fee: 0m), trackTrades: true);
+
+        result.Trades.Should().ContainSingle().Which.ExitTime.Should().Be(candles[1].CloseTime);
     }
 
     /// <summary>
@@ -335,6 +390,7 @@ public class BacktestEngineTests
         return new BacktestCandleSnapshot
         {
             OpenTime = DateTime.UnixEpoch.AddDays(day),
+            CloseTime = DateTime.UnixEpoch.AddDays(day + 1).AddTicks(-1),
             OpenPrice = open,
             HighPrice = high,
             LowPrice = low,

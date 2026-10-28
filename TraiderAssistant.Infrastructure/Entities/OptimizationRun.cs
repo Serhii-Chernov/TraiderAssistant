@@ -23,6 +23,19 @@ namespace TraiderAssistant.Infrastructure.Entities
         public int TotalTrades { get; set; }
         public int WinningTrades { get; set; }
         public decimal MaxDrawdown { get; set; }
+        public decimal ProfitFactor { get; set; }
+        public decimal SharpeRatio { get; set; }
+        public decimal GrossProfit { get; set; }
+        public decimal GrossLoss { get; set; }
+
+        // Reproducibility metadata. Legacy rows keep these fields null.
+        public DateTime? PeriodStart { get; set; }
+        public DateTime? PeriodEnd { get; set; }
+        public string CandidateSetVersion { get; set; }
+        public int? CandidateIndex { get; set; }
+        public decimal TradingFee { get; set; }
+        public decimal Slippage { get; set; }
+        public string EngineVersion { get; set; }
 
         public List<TradeLog> Trades { get; set; } = new List<TradeLog>();
     }

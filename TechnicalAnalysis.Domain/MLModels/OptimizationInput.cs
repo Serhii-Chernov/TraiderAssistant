@@ -47,5 +47,12 @@ namespace TechnicalAnalysis.Domain.MLModels
 
         // Risk-adjusted optimization target. Raw profit is deliberately not used as the label.
         [LoadColumn(32), ColumnName("Label")] public float RiskAdjustedScore { get; set; }
+
+        public OptimizationInput CopyWithScore(float score)
+        {
+            var copy = (OptimizationInput)MemberwiseClone();
+            copy.RiskAdjustedScore = score;
+            return copy;
+        }
     }
 }

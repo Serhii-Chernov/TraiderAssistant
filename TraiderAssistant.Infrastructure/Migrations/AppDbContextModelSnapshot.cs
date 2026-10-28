@@ -37,7 +37,13 @@ namespace TraiderAssistant.Infrastructure.Migrations
                     b.Property<int>("BuyThreshold")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CandidateSetVersion")
+                        .HasColumnType("text");
+
                     b.Property<string>("IndicatorWeightsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SelectionMethod")
                         .HasColumnType("text");
 
                     b.Property<int>("SellThreshold")
@@ -52,6 +58,15 @@ namespace TraiderAssistant.Infrastructure.Migrations
                     b.Property<string>("Timeframe")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("TrainingEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("TrainingStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("WalkForwardScore")
+                        .HasColumnType("numeric");
 
                     b.HasKey("Id");
 
@@ -69,14 +84,44 @@ namespace TraiderAssistant.Infrastructure.Migrations
                     b.Property<string>("Asset")
                         .HasColumnType("text");
 
+                    b.Property<int?>("CandidateIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CandidateSetVersion")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EngineVersion")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("GrossLoss")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("GrossProfit")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("IndicatorWeightsJson")
                         .HasColumnType("text");
 
                     b.Property<decimal>("MaxDrawdown")
                         .HasColumnType("numeric");
 
+                    b.Property<DateTime?>("PeriodEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PeriodStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("ProfitFactor")
+                        .HasColumnType("numeric");
+
                     b.Property<DateTime>("RunDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("SharpeRatio")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Slippage")
+                        .HasColumnType("numeric");
 
                     b.Property<string>("Timeframe")
                         .HasColumnType("text");
@@ -87,10 +132,16 @@ namespace TraiderAssistant.Infrastructure.Migrations
                     b.Property<int>("TotalTrades")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("TradingFee")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("WinningTrades")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Asset", "Timeframe", "CandidateSetVersion", "EngineVersion", "CandidateIndex", "PeriodStart", "PeriodEnd")
+                        .IsUnique();
 
                     b.ToTable("OptimizationRuns");
                 });

@@ -23,7 +23,9 @@ namespace TechnicalAnalysis.Domain.Services
         private readonly TechnicalAnalysisService _analysisService;
         private readonly AppDbContext _dbContext;
         private readonly ILogger<BacktestService> _logger;
-        private const decimal TradingFee = 0.001m;
+        internal const decimal TradingFee = 0.001m;
+        internal const decimal ExecutionSlippage = 0.0005m;
+        internal const string BacktestEngineVersion = "2.0-next-open-slippage-intrabar-dd";
         private const int WarmUpCandlesCount = 300;
         internal const int TargetOptimizationCombinationsPerInterval = 200;
 
@@ -81,6 +83,8 @@ namespace TechnicalAnalysis.Domain.Services
                 timeframeFilter);
 
             IQueryable<ActiveStrategy> strategyQuery = _dbContext.ActiveStrategies.AsNoTracking();
+            if (!useDefaultStrategy)
+                strategyQuery = strategyQuery.Where(strategy => strategy.SelectionMethod == "WalkForward");
             if (pairFilter.HasValue)
                 strategyQuery = strategyQuery.Where(strategy => strategy.Asset == pairFilter.Value.ToString());
             if (timeframeFilter.HasValue)
@@ -301,6 +305,7 @@ namespace TechnicalAnalysis.Domain.Services
                 strategy.Id, strategy.Asset, strategy.Timeframe, historyData.Count);
 
             int simulationStartIndex = GetSimulationStartIndex(historyData, startTime);
+            int simulationEndIndex = GetSimulationEndIndex(historyData, endTime);
             var oscKeys = GetOscillatorKeys();
             var maKeys = GetMovingAverageKeys();
 
@@ -362,7 +367,8 @@ namespace TechnicalAnalysis.Domain.Services
                     sellThreshold,
                     stopLoss,
                     takeProfit),
-                trackTrades: true);
+                trackTrades: true,
+                simulationEndIndex: simulationEndIndex);
 
             _logger.LogInformation(
                 "Simulation finished. StrategyId: {StrategyId}, Asset: {Asset}, Timeframe: {Timeframe}, FinalBalance: {FinalBalance}, ProfitPercentage: {ProfitPercentage}, Trades: {Trades}",
@@ -382,11 +388,14 @@ namespace TechnicalAnalysis.Domain.Services
 
             // 1. Ищем боевую стратегию ИИ в БД
             var strategy = await _dbContext.ActiveStrategies
-                .FirstOrDefaultAsync(s => s.Asset == pair.ToString() && s.Timeframe == interval.ToString());
+                .FirstOrDefaultAsync(s => s.Asset == pair.ToString() &&
+                                          s.Timeframe == interval.ToString() &&
+                                          s.SelectionMethod == "WalkForward");
 
             if (strategy == null)
                 throw new InvalidOperationException(
-                    $"Нет обученной ИИ-стратегии для {pair} {interval}. Сначала запустите глобальную оптимизацию.");
+                    $"Нет активной walk-forward стратегии для {pair} {interval}. " +
+                    "Сначала выполните анализ и явную активацию walk-forward стратегий.");
 
             var config = JsonConvert.DeserializeObject<WeightsJsonSchema>(strategy.IndicatorWeightsJson);
 
@@ -398,6 +407,7 @@ namespace TechnicalAnalysis.Domain.Services
             var historyData = rawData.ToList();
 
             int simulationStartIndex = GetSimulationStartIndex(historyData, startTime);
+            int simulationEndIndex = GetSimulationEndIndex(historyData, endTime);
 
             // 3. Предрасчет (Кэширование индикаторов)
             var oscKeys = GetOscillatorKeys();
@@ -427,7 +437,8 @@ namespace TechnicalAnalysis.Domain.Services
                     config.SellThreshold,
                     config.StopLoss,
                     config.TakeProfit),
-                trackTrades: true);
+                trackTrades: true,
+                simulationEndIndex: simulationEndIndex);
 
             return result;
         }
@@ -507,6 +518,7 @@ namespace TechnicalAnalysis.Domain.Services
                     }
 
                     int simulationStartIndex = GetSimulationStartIndex(historyData, startDate);
+                    int simulationEndIndex = GetSimulationEndIndex(historyData, endDate);
 
                     // === 1. ПРЕДРАСЧЕТ ИНДИКАТОРОВ (КЭШИРОВАНИЕ) ===
                     Console.WriteLine(
@@ -622,7 +634,8 @@ namespace TechnicalAnalysis.Domain.Services
                                     sellThreshold,
                                     stopLossPct,
                                     takeProfitPct),
-                                trackTrades: false);
+                                trackTrades: false,
+                                simulationEndIndex: simulationEndIndex);
 
                             var runRecord = new OptimizationRun
                             {
@@ -764,6 +777,78 @@ namespace TechnicalAnalysis.Domain.Services
             return evaluations;
         }
 
+        internal async Task<List<CandidatePeriodBacktest>> EvaluateCandidatePeriodsAsync(
+            string asset,
+            string timeframe,
+            IReadOnlyList<(int Index, OptimizationInput Parameters)> candidates,
+            IReadOnlyList<WalkForwardPeriod> periods,
+            decimal initialDeposit)
+        {
+            if (!Enum.TryParse<CurrencyPair>(asset, out var pair))
+                throw new ArgumentException($"Unknown currency pair '{asset}'.", nameof(asset));
+            if (!Enum.TryParse<KlineInterval>(timeframe, out var interval))
+                throw new ArgumentException($"Unknown timeframe '{timeframe}'.", nameof(timeframe));
+            if (candidates.Count == 0 || periods.Count == 0)
+                return new List<CandidatePeriodBacktest>();
+
+            DateTime firstStart = periods.Min(period => period.Start);
+            DateTime lastEnd = periods.Max(period => period.End);
+            ValidateBacktestRequest(firstStart, lastEnd, initialDeposit);
+
+            int intervalMinutes = _binanceService.GetIntervalInMinutes(interval);
+            DateTime warmUpStartTime = firstStart.AddMinutes(-1 * WarmUpCandlesCount * intervalMinutes);
+            var historyData = (await _binanceService.GetFullHistoryDataAsync(
+                pair,
+                interval,
+                warmUpStartTime,
+                lastEnd)).ToList();
+            int firstStartIndex = GetSimulationStartIndex(historyData, firstStart);
+            var snapshots = BuildCandleSnapshots(
+                historyData,
+                firstStartIndex,
+                GetOscillatorKeys(),
+                GetMovingAverageKeys());
+            var periodIndexes = periods.ToDictionary(
+                period => period,
+                period => (
+                    Start: GetSimulationStartIndex(historyData, period.Start),
+                    End: GetSimulationEndIndex(historyData, period.End)));
+            var results = new List<CandidatePeriodBacktest>(candidates.Count * periods.Count);
+
+            foreach (var candidate in candidates)
+            {
+                var settings = CreateBacktestSettings(candidate.Parameters);
+                foreach (var period in periods)
+                {
+                    var indexes = periodIndexes[period];
+                    var result = BacktestEngine.Run(
+                        snapshots,
+                        indexes.Start,
+                        initialDeposit,
+                        settings,
+                        trackTrades: false,
+                        simulationEndIndex: indexes.End);
+
+                    results.Add(new CandidatePeriodBacktest
+                    {
+                        CandidateIndex = candidate.Index,
+                        Parameters = candidate.Parameters,
+                        Period = period,
+                        TotalTrades = result.TotalTrades,
+                        WinningTrades = result.WinningTrades,
+                        TotalReturn = result.ProfitPercentage,
+                        MaxDrawdown = result.MaxDrawdown,
+                        ProfitFactor = result.ProfitFactor,
+                        SharpeRatio = result.SharpeRatio,
+                        GrossProfit = result.GrossProfit,
+                        GrossLoss = result.GrossLoss
+                    });
+                }
+            }
+
+            return results;
+        }
+
         internal static StrategyCandidateValidationResult CreateCandidateValidationResult(
             PredictedStrategyCandidate candidate,
             int rank,
@@ -851,6 +936,7 @@ namespace TechnicalAnalysis.Domain.Services
             var historyData = rawData.ToList();
 
             int simulationStartIndex = GetSimulationStartIndex(historyData, startTime);
+            int simulationEndIndex = GetSimulationEndIndex(historyData, endTime);
 
             var oscKeys = GetOscillatorKeys();
             var maKeys = GetMovingAverageKeys();
@@ -876,7 +962,8 @@ namespace TechnicalAnalysis.Domain.Services
                     -30,
                     0.05m,
                     0.10m),
-                trackTrades: true);
+                trackTrades: true,
+                simulationEndIndex: simulationEndIndex);
 
             return result;
         }
@@ -892,13 +979,14 @@ namespace TechnicalAnalysis.Domain.Services
             var snapshots = historyData.Select(kline => new BacktestCandleSnapshot
             {
                 OpenTime = kline.OpenTime,
+                CloseTime = kline.CloseTime,
                 OpenPrice = kline.OpenPrice,
                 HighPrice = kline.HighPrice,
                 LowPrice = kline.LowPrice,
                 ClosePrice = kline.ClosePrice
             }).ToArray();
 
-            // The final candle is reserved for execution/forced close because it may still be incomplete.
+            // The final candle is reserved for execution/forced close; its signal cannot be executed in-range.
             for (int index = simulationStartIndex; index < historyData.Count - 1; index++)
             {
                 var analysisWindow = historyData.GetRange(index - 250, 251);
@@ -976,7 +1064,8 @@ namespace TechnicalAnalysis.Domain.Services
                     return index;
             }
 
-            throw new InvalidOperationException("Historical data does not contain candles before the requested end time.");
+            throw new InvalidOperationException(
+                "Historical data does not contain candles before the requested end time.");
         }
 
         private static BacktestSettings CreateBacktestSettings(OptimizationInput parameters)
@@ -1042,7 +1131,10 @@ namespace TechnicalAnalysis.Domain.Services
                 sellThreshold,
                 stopLoss,
                 takeProfit,
-                TradingFee);
+                TradingFee)
+            {
+                Slippage = ExecutionSlippage
+            };
         }
 
         private static void ValidateBacktestRequest(
