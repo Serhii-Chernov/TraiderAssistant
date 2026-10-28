@@ -7,50 +7,56 @@ using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain.Services.TechnicalAnalysis
 {
-    internal class MovingAveragesService
+    public class MovingAveragesService
     {
-
-        internal List<TechnicalAnalysisNameValueActionStruct> PerformMovingAverages(IEnumerable<decimal> prices)
+        public List<TechnicalAnalysisNameValueActionStruct> PerformMovingAverages(IEnumerable<decimal> prices)
         {
+            var priceList = prices?.ToList() ?? throw new ArgumentNullException(nameof(prices));
+            if (priceList.Count == 0)
+                throw new ArgumentException("Price list is empty.", nameof(prices));
+
             int[] periods = { 10, 20, 30, 50, 100, 200 };
-            decimal currentPrice = prices.Last();
+            decimal currentPrice = priceList[^1];
             List<TechnicalAnalysisNameValueActionStruct> MAsStructs = new List<TechnicalAnalysisNameValueActionStruct>();
             TechnicalAnalysisNameValueActionStruct MAStruct;
             foreach (int period in periods)
             {
-                if (prices.Count() >= period)
+                if (priceList.Count >= period)
                 {
 
                     MAStruct = new TechnicalAnalysisNameValueActionStruct();
                     MAStruct.Name = $"SMA({period})";
-                    MAStruct.Value = CalculateSMA(period, prices);
+                    MAStruct.Value = CalculateSMA(period, priceList);
                     MAStruct.Action = GetMovingAverageAction(MAStruct.Value, currentPrice);
                     MAsStructs.Add(MAStruct);
 
                     MAStruct = new TechnicalAnalysisNameValueActionStruct();
                     MAStruct.Name = $"EMA({period})";
-                    MAStruct.Value = CalculateEMA(period, prices);
+                    MAStruct.Value = CalculateEMA(period, priceList);
                     MAStruct.Action = GetMovingAverageAction(MAStruct.Value, currentPrice);
                     MAsStructs.Add(MAStruct);
                 }
             }
-            if (prices.Count() >= 9)
+            const int hmaPeriod = 9;
+            int hmaLookback = hmaPeriod + (int)Math.Sqrt(hmaPeriod) - 1;
+            if (priceList.Count >= hmaLookback)
             {
                 MAStruct = new TechnicalAnalysisNameValueActionStruct();
-                MAStruct.Name = $"HMA(9)";
-                MAStruct.Value = CalculateHMA(9, prices);
+                MAStruct.Name = "HMA(9)";
+                MAStruct.Value = CalculateHMA(hmaPeriod, priceList);
                 MAStruct.Action = GetMovingAverageAction(MAStruct.Value, currentPrice);
                 MAsStructs.Add(MAStruct);
             }
             return MAsStructs;
         }
 
-        internal decimal CalculateMovingAverageIndicator(List<TechnicalAnalysisNameValueActionStruct> MAsStructs)
+        // Новий метод
+        public decimal CalculateMovingAverageIndicator(
+            List<TechnicalAnalysisNameValueActionStruct> MAsStructs,
+            Dictionary<string, decimal> weights)
         {
             if (MAsStructs == null || MAsStructs.Count == 0)
                 throw new ArgumentException("List is null or empty.");
-
-            var weights = GetMovingAverageWeights();
 
             decimal weightedSum = 0;
             decimal totalWeight = 0;
@@ -73,6 +79,14 @@ namespace TechnicalAnalysis.Domain.Services.TechnicalAnalysis
 
             return totalWeight > 0 ? (weightedSum / totalWeight) * 100 : 0;
         }
+
+        // Старий метод (викликає GetMovingAverageWeights())
+        public decimal CalculateMovingAverageIndicator(List<TechnicalAnalysisNameValueActionStruct> MAsStructs)
+        {
+            var defaultWeights = GetMovingAverageWeights();
+            return CalculateMovingAverageIndicator(MAsStructs, defaultWeights);
+        }
+
         private Dictionary<string, decimal> GetMovingAverageWeights()
         {
             return new Dictionary<string, decimal>
@@ -117,23 +131,28 @@ namespace TechnicalAnalysis.Domain.Services.TechnicalAnalysis
 
         private decimal CalculateHMA(int period, IEnumerable<decimal> prices)
         {
-            if (prices.Count() < period)
+            var priceList = prices.ToList();
+            int sqrtPeriod = (int)Math.Sqrt(period);
+            int requiredValues = period + sqrtPeriod - 1;
+
+            if (priceList.Count < requiredValues)
                 throw new InvalidOperationException("Not enough data to calculate HMA");
 
             int halfPeriod = period / 2;
-            int sqrtPeriod = (int)Math.Sqrt(period);
+            var weightedDifferences = new List<decimal>(sqrtPeriod);
 
-            // Calculate WMA(halfPeriod) and WMA(period)
-            var wmaHalf = CalculateWMA(halfPeriod, prices);
-            var wmaFull = CalculateWMA(period, prices);
+            // HMA needs a rolling series of raw values before the final smoothing pass.
+            for (int endExclusive = priceList.Count - sqrtPeriod + 1;
+                 endExclusive <= priceList.Count;
+                 endExclusive++)
+            {
+                var prefix = priceList.Take(endExclusive);
+                decimal wmaHalf = CalculateWMA(halfPeriod, prefix);
+                decimal wmaFull = CalculateWMA(period, prefix);
+                weightedDifferences.Add(2 * wmaHalf - wmaFull);
+            }
 
-            // Create a list of differences: 2 * WMA(halfPeriod) - WMA(period)
-            var weightedDiff = prices.TakeLast(period)
-                .Select(p => 2 * wmaHalf - wmaFull)
-                .ToList();
-
-            // Calculate WMA(sqrtPeriod) based on the difference
-            return CalculateWMA(sqrtPeriod, weightedDiff);
+            return CalculateWMA(sqrtPeriod, weightedDifferences);
         }
 
 

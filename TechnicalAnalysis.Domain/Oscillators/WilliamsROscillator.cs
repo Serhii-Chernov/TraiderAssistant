@@ -24,9 +24,13 @@ namespace TechnicalAnalysis.Domain
             if (closePrices.Count < period)
                 throw new ArgumentException("Not enough data to calculate Williams%R.");
 
-            decimal highestHigh = highs.TakeLast(period).Max();
-            decimal lowestLow = lows.TakeLast(period).Min();
-            decimal currentClose = closePrices.Last();
+            int startIndex = highs.Count - period;
+            var recentHighs = highs.GetRange(startIndex, period);
+            var recentLows = lows.GetRange(startIndex, period);
+
+            decimal highestHigh = recentHighs.Max();
+            decimal lowestLow = recentLows.Min();
+            decimal currentClose = closePrices[closePrices.Count - 1];
 
             decimal denominator = highestHigh - lowestLow;
             if (denominator == 0)
@@ -40,7 +44,9 @@ namespace TechnicalAnalysis.Domain
 
         public string GetAction(decimal value, decimal? extraValue = null)
         {
-            return value < -20 ? TradeAction.Sell : (value > -80 ? TradeAction.Buy : TradeAction.Neutral);
+            if (value > -20) return TradeAction.Sell;
+            if (value < -80) return TradeAction.Buy;
+            return TradeAction.Neutral;
         }
     }
 

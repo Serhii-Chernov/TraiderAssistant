@@ -34,13 +34,13 @@ namespace TechnicalAnalysis.Shared
         }
         private string UpdateResultText(double indicatorValue)
         {
-            if (indicatorValue < -50)
+            if (indicatorValue <= -50)
                 return TradeAction.ActiveSell;
             else if (indicatorValue < -15)
                 return TradeAction.Sell;
-            else if (indicatorValue > -15 && indicatorValue < 15)
+            else if (indicatorValue <= 15)
                 return TradeAction.Neutral;
-            else if (indicatorValue > 50)
+            else if (indicatorValue >= 50)
                 return TradeAction.ActiveBuy;
             else
                 return TradeAction.Buy;

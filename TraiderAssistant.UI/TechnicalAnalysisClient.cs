@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using TechnicalAnalysis.Shared;
+using TraiderAssistant.UI.Views;
 
 
 namespace TraiderAssistant.UI
@@ -19,17 +20,49 @@ namespace TraiderAssistant.UI
     public class TechnicalAnalysisClient
     {
         private ILogger _logger;
-        private static readonly HttpClient httpClient = new HttpClient();
+        private static readonly HttpClient httpClient = new HttpClient()
+        {
+            Timeout = TimeSpan.FromMinutes(10) // Даем серверу до 10 минут на тяжелые расчеты
+        };
         private const string analysisApiUrl = "https://technicalanalysis.azurewebsites.net/Analysis/Calculate";
-        private const string analysisLocalUrl = "https://localhost:5001/Analysis/Calculate";//7010
+        private const string analysisLocalUrl = "https://localhost:7010/Analysis/Calculate";//7010
+        //private const string analysisLocalUrl = "https://localhost:5001/Analysis/Calculate";//7010
         private const string chartApiUrl = "https://technicalanalysis.azurewebsites.net/Chart/GetChartData";
-        private const string chartLocalUrl = "https://localhost:5001/Chart/GetChartData";//7010
+        private const string chartLocalUrl = "https://localhost:7010/Chart/GetChartData";//7010
+        //private const string chartLocalUrl = "https://localhost:5001/Chart/GetChartData";//7010
 
         public TechnicalAnalysisClient() 
         {
             
             _logger = SerilogLoggerFactory.CreateLogger<TechnicalAnalysisClient>();
             _logger.LogInfo("TechnicalAnalysisClient initialized");
+        }
+
+        public async Task<BacktestResultDto> RunBacktestAsync(string pair, string interval, decimal initialDeposit)
+        {
+            try
+            {
+                // Используем тот же хост/порт, что и в analysisLocalUrl (например, https://localhost:7010)
+                var uri = new Uri(analysisLocalUrl);
+                string baseUrl = $"{uri.Scheme}://{uri.Authority}";
+
+                string stringRequest = $"{baseUrl}/api/Backtest/RunSingle?pair={pair}&interval={interval}&initialDeposit={initialDeposit}";
+                _logger.LogInfo($"Request sent: {stringRequest}");
+
+                var response = await httpClient.GetAsync(stringRequest);
+                _logger.LogInfo($"Response: {response}");
+                response.EnsureSuccessStatusCode();
+
+                var jsonResponse = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<BacktestResultDto>(jsonResponse);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogInfo($"Backtest Request Error: {ex.Message}");
+                return null;
+            }
         }
 
         public async Task<TechnicalAnalysisResult> GetTechnicalAnalysisAsync(CurrencyPair currencyPair, DateTime endTime, KlineInterval klineInterval)

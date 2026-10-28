@@ -1,21 +1,15 @@
 ﻿using Binance.Net.Objects.Models.Spot;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using TechnicalAnalysis.Shared;
 
-namespace TechnicalAnalysis.Domain
+namespace TechnicalAnalysis.Domain.Oscillators
 {
-    //
     public class StochasticKOscillator : IOscillator
     {
         public string Name { get; set; } = "StochasticK";
 
         public TechnicalAnalysisNameValueActionStruct Calculate(IEnumerable<BinanceSpotKline> data)
         {
-            TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
+            TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new();
             technicalAnalysisStruct.Name = Name;
             int period = 14;
             var closePrices = data.Select(k => k.ClosePrice).ToList();
@@ -25,9 +19,13 @@ namespace TechnicalAnalysis.Domain
             if (closePrices.Count < period)
                 throw new ArgumentException("Not enough data to calculate StochasticK.");
 
-            decimal highestHigh = highs.TakeLast(period).Max();
-            decimal lowestLow = lows.TakeLast(period).Min();
-            decimal currentClose = closePrices.Last();
+            int startIndex = highs.Count - period;
+            var recentHighs = highs.GetRange(startIndex, period);
+            var recentLows = lows.GetRange(startIndex, period);
+
+            decimal highestHigh = recentHighs.Max();
+            decimal lowestLow = recentLows.Min();
+            decimal currentClose = closePrices[closePrices.Count - 1];
 
             decimal denominator = highestHigh - lowestLow;
             if (denominator == 0)
@@ -41,7 +39,11 @@ namespace TechnicalAnalysis.Domain
 
         public string GetAction(decimal value, decimal? extraValue = null)
         {
-            return value > 80 ? TradeAction.Sell : (value < 20 ? TradeAction.Buy : TradeAction.Neutral);
+            if (value > 80)
+                return TradeAction.Sell;
+            if (value < 20)
+                return TradeAction.Buy;
+            return TradeAction.Neutral;
         }
     }
 

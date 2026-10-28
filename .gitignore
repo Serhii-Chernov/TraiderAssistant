@@ -402,6 +402,14 @@ FodyWeavers.xsd
 .idea/
 /.vs/SkypeRecorder/v17/DocumentLayout.json
 /.vs
+
+# Local strategy analysis artifacts
+/ForwardTest_*.png
+/forward-test_*.xlsx
+/modify-forward-test_*.xlsx
+/list.txt
+/plot_results*.py
+global_model.zip
 DocumentLayout.json
 /.vs/SkypeRecorder/v17
 /.vs

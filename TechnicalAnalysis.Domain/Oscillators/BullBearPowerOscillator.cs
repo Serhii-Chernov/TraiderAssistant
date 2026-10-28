@@ -25,10 +25,10 @@ namespace TechnicalAnalysis.Domain
             decimal ema = CalculateEMA(closePrices, period);
 
             // Bull Power = Maximum Price - EMA
-            decimal bullPower = highs.Last() - ema;
+            decimal bullPower = highs[highs.Count - 1] - ema;
 
             // Bear Power = Minimum Price - EMA
-            decimal bearPower = lows.Last() - ema;
+            decimal bearPower = lows[lows.Count - 1] - ema;
             technicalAnalysisStruct.Name = Name;
             technicalAnalysisStruct.Value = (bullPower + bearPower) / 2;
             technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);

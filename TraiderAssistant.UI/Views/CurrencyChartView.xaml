@@ -7,6 +7,7 @@
       xmlns:local="clr-namespace:TraiderAssistant.UI.Views"
       xmlns:viewModels="clr-namespace:TraiderAssistant.UI.ViewModels"
       xmlns:binance="clr-namespace:Binance.Net.Enums;assembly=Binance.Net"
+      xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
       mc:Ignorable="d" 
       
       d:DataContext="{d:DesignInstance viewModels:CurrencyChartViewModel}">
@@ -16,20 +17,40 @@
         <ScrollViewer>
             <Grid Margin="10,10,10,0" >
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="Auto"/>
+
                     <RowDefinition Height="400" />
-                    <RowDefinition Height="30"/>
+
+                    <RowDefinition Height="Auto"/>
+
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5"  >
-                    <ComboBox ItemsSource="{Binding ChartTypes}" SelectedItem="{Binding SelectedChartType}"  Width="70"  />
-                    <Button Content="Now" Command="{Binding EnableAutoUpdateCommand}" />
-                    <Button Content="1D" Command="{Binding SetChartPeriodCommand}" CommandParameter="1D" />
-                    <Button Content="1 week" Command="{Binding SetChartPeriodCommand}" CommandParameter="1W" Padding="5, 0, 5, 0" />
-                    <Button Content="1 month" Command="{Binding SetChartPeriodCommand}" CommandParameter="1M" Padding="5, 0, 5, 0" />
-                    <Button Content="1 year" Command="{Binding SetChartPeriodCommand}" CommandParameter="1Y" Padding="5, 0, 5, 0" />
-                </StackPanel>
+                <materialDesign:Card Margin="5" Padding="10" UniformCornerRadius="8" materialDesign:ElevationAssist.Elevation="Dp2">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+
+                        <ComboBox ItemsSource="{Binding ChartTypes}"
+                  SelectedItem="{Binding SelectedChartType}"
+                  Width="100"
+                  materialDesign:HintAssist.Hint="Тип графика"
+                  Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                  Margin="0,0,15,0"/>
+
+                        <Button Command="{Binding EnableAutoUpdateCommand}"
+                Style="{StaticResource MaterialDesignOutlinedButton}"
+                Margin="5,0" ToolTip="Автообновление графика">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="RefreshAuto" Margin="0,0,5,0"/>
+                                <TextBlock Text="Now"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Content="1 D" Command="{Binding SetChartPeriodCommand}" CommandParameter="1D" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0"/>
+                        <Button Content="1 W" Command="{Binding SetChartPeriodCommand}" CommandParameter="1W" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0"/>
+                        <Button Content="1 M" Command="{Binding SetChartPeriodCommand}" CommandParameter="1M" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0"/>
+                        <Button Content="1 Y" Command="{Binding SetChartPeriodCommand}" CommandParameter="1Y" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0"/>
+                    </StackPanel>
+                </materialDesign:Card>
 
                 <!-- График -->
                 <lvc:CartesianChart Grid.Row="1" Series="{Binding Series}" LegendLocation="Top">
@@ -41,20 +62,22 @@
                     </lvc:CartesianChart.AxisY>
                 </lvc:CartesianChart>
 
-                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="5"  >
-                    <Button Content="1 m" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.OneMinute}" Padding="5, 0, 5, 0" />
-                    <Button Content="5 m" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.FiveMinutes}" Padding="5, 0, 5, 0" />
-                    <Button Content="15 m" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.FifteenMinutes}" Padding="5, 0, 5, 0" />
-                    <Button Content="30 m" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.ThirtyMinutes}" Padding="5, 0, 5, 0" />
-                    <Button Content="1 h" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.OneHour}" Padding="5, 0, 5, 0" />
-                    <Button Content="2 h" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.TwoHour}" Padding="5, 0, 5, 0" />
-                    <Button Content="4 h" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.FourHour}" Padding="5, 0, 5, 0" />
-                    <Button Content="1 d" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.OneDay}" Padding="5, 0, 5, 0" />
-                </StackPanel>
+                <materialDesign:Card Grid.Row="2" Margin="5" Padding="5" UniformCornerRadius="8" HorizontalAlignment="Center" materialDesign:ElevationAssist.Elevation="Dp1">
+                    <StackPanel Orientation="Horizontal" >
+                        <Button Content="1 m" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.OneMinute}" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0" />
+                        <Button Content="5 m" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.FiveMinutes}" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0" />
+                        <Button Content="15 m" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.FifteenMinutes}" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0" />
+                        <Button Content="30 m" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.ThirtyMinutes}" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0" />
+                        <Button Content="1 h" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.OneHour}" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0" />
+                        <Button Content="2 h" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.TwoHour}" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0" />
+                        <Button Content="4 h" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.FourHour}" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0" />
+                        <Button Content="1 d" Command="{Binding SetTechnicalAnalysisKlineIntervalCommand}" CommandParameter="{x:Static binance:KlineInterval.OneDay}" Style="{StaticResource MaterialDesignFlatButton}" Margin="2,0" />
+                    </StackPanel>
+                </materialDesign:Card>
 
-                <!--indicators-->
-                <StackPanel Grid.Row="3" >
-                    <Border  BorderBrush="LightGray" BorderThickness="2" CornerRadius="5">
+                <StackPanel Grid.Row="3" Margin="0,15,0,0">
+
+                    <materialDesign:Card Margin="5" Padding="20" UniformCornerRadius="8" materialDesign:ElevationAssist.Elevation="Dp2">
                         <Grid IsSharedSizeScope="True">
                             <Grid.ColumnDefinitions >
                                 <ColumnDefinition Width="*" />
@@ -62,21 +85,25 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
-                            <local:TechnicalAnalysisIndicatorView Grid.Column="0" Margin="10,0,0,0" TechnicalAnalysisName="Oscillators" TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.OscillatorIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.OscillatorResultText}"  />
-                            <local:TechnicalAnalysisIndicatorView Grid.Column="1" Margin="10,0,10,0" TechnicalAnalysisName="General"  TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.GeneralIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.GeneralResultText}" />
-                            <local:TechnicalAnalysisIndicatorView Grid.Column="2" Margin="0,0,0,0" TechnicalAnalysisName="MAs"  TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.MAIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.MAResultText}" />
+                            <local:TechnicalAnalysisIndicatorView Grid.Column="0" Margin="10,0" TechnicalAnalysisName="Oscillators" TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.OscillatorIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.OscillatorResultText}"  />
+                            <local:TechnicalAnalysisIndicatorView Grid.Column="1" Margin="10,0" TechnicalAnalysisName="General"  TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.GeneralIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.GeneralResultText}" />
+                            <local:TechnicalAnalysisIndicatorView Grid.Column="2" Margin="10,0" TechnicalAnalysisName="MAs"  TechnicalAnalysisIndicator="{Binding TechnicalAnalysisResult.MAIndicator}" TechnicalAnalysisText="{Binding TechnicalAnalysisResult.MAResultText}" />
                         </Grid>
-                    </Border>
+                    </materialDesign:Card>
 
-                    <!--tables-->
-                    <Grid VerticalAlignment="Stretch"  HorizontalAlignment="Stretch" Margin="0,10" >
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <local:TechnicalAnalysisTableView Grid.Column="0" Margin="10, 0, 10, 0" TechnicalAnalysisTableName="Oscillators" TechnicalAnalysisTableData="{Binding TechnicalAnalysisResult.Oscillators}" />
-                        <local:TechnicalAnalysisTableView Grid.Column="1" Margin="10, 0, 10, 0" TechnicalAnalysisTableName="MovingAverages" TechnicalAnalysisTableData="{Binding TechnicalAnalysisResult.MovingAverages}" />
-                    </Grid>
+                    <materialDesign:Card Margin="5,15,5,15" Padding="15" UniformCornerRadius="8" materialDesign:ElevationAssist.Elevation="Dp2">
+                        <Grid VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <local:TechnicalAnalysisTableView Grid.Column="0" TechnicalAnalysisTableName="Oscillators" TechnicalAnalysisTableData="{Binding TechnicalAnalysisResult.Oscillators}" />
+                            <local:TechnicalAnalysisTableView Grid.Column="2" TechnicalAnalysisTableName="Moving Averages" TechnicalAnalysisTableData="{Binding TechnicalAnalysisResult.MovingAverages}" />
+                        </Grid>
+                    </materialDesign:Card>
+
                 </StackPanel>
             </Grid>
         </ScrollViewer>
