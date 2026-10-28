@@ -8,7 +8,7 @@ using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
-    public class CCIOscillator : IOscillator
+    public class CciOscillator : IOscillator
     {
         public string Name { get; set; } = "CCI";
 
@@ -33,7 +33,7 @@ namespace TechnicalAnalysis.Domain
             if (meanDeviation == 0)
                 technicalAnalysisStruct.Value = 0;
             else
-                technicalAnalysisStruct.Value = (typicalPrices.Last() - sma) / (0.015m * meanDeviation);
+                technicalAnalysisStruct.Value = (typicalPrices[typicalPrices.Count - 1] - sma) / (0.015m * meanDeviation);
 
             technicalAnalysisStruct.Action = GetAction(technicalAnalysisStruct.Value);
             return technicalAnalysisStruct;
@@ -42,7 +42,11 @@ namespace TechnicalAnalysis.Domain
 
         public string GetAction(decimal value, decimal? extraValue = null)
         {
-            return value > 100 ? TradeAction.Sell : (value < -100 ? TradeAction.Buy : TradeAction.Neutral);
+            if (value > 100)
+                return TradeAction.Sell;
+            if (value < -100)
+                return TradeAction.Buy;
+            return TradeAction.Neutral;
         }
     }
 

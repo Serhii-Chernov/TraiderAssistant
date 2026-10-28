@@ -68,5 +68,10 @@ namespace TraiderAssistant.UI
             _logger.LogInfo("MainContent: LTCUSDT");
             MainContent.Navigate(new CurrencyChartView(CurrencyPair.LTCUSDT));
         }
+        private void BacktestButton_Click(object sender, RoutedEventArgs e)
+        {
+            _logger.LogInfo("MainContent: AI Backtesting");
+            MainContent.Navigate(new BacktestView());
+        }
     }
 }

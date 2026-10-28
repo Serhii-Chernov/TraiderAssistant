@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TechnicalAnalysis.Domain", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TechnicalAnalysis.Shared", "TechnicalAnalysis.Shared\TechnicalAnalysis.Shared.csproj", "{8DFEA2DE-F002-4680-BD43-9D1BAB4C69B1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TraiderAssistant.Infrastructure", "TraiderAssistant.Infrastructure\TraiderAssistant.Infrastructure.csproj", "{295C0321-E3DA-1950-07D5-51C2D7400623}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TechnicalAnalysis.Tests", "TechnicalAnalysis.Tests\TechnicalAnalysis.Tests.csproj", "{24A7D3DE-6316-48EC-95AC-372357D95EE3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +37,14 @@ Global
 		{8DFEA2DE-F002-4680-BD43-9D1BAB4C69B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8DFEA2DE-F002-4680-BD43-9D1BAB4C69B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8DFEA2DE-F002-4680-BD43-9D1BAB4C69B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{295C0321-E3DA-1950-07D5-51C2D7400623}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{295C0321-E3DA-1950-07D5-51C2D7400623}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{295C0321-E3DA-1950-07D5-51C2D7400623}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{295C0321-E3DA-1950-07D5-51C2D7400623}.Release|Any CPU.Build.0 = Release|Any CPU
+		{24A7D3DE-6316-48EC-95AC-372357D95EE3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{24A7D3DE-6316-48EC-95AC-372357D95EE3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{24A7D3DE-6316-48EC-95AC-372357D95EE3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{24A7D3DE-6316-48EC-95AC-372357D95EE3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

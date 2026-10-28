@@ -1,4 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using TechnicalAnalysis.Domain;
+using TechnicalAnalysis.Domain.Services;
+using TraiderAssistant.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,19 +21,39 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddSingleton<StrategyProviderService>();
 builder.Services.AddSingleton<TechnicalAnalysisService>();
+builder.Services.AddSingleton<BinanceService>();
+builder.Services.AddScoped<BacktestService>();
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddScoped<MachineLearningService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.MigrateAsync();
+
+    var strategyProvider = scope.ServiceProvider.GetRequiredService<StrategyProviderService>();
+    await strategyProvider.LoadStrategiesFromDatabaseAsync();
+}
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseCors();
 
-app.UseHttpsRedirection();
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
+
+
+public partial class Program { }

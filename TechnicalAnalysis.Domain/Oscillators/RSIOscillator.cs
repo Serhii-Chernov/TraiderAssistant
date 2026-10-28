@@ -9,7 +9,7 @@ using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
-    public class RSIOscillator : IOscillator
+    public class RsiOscillator : IOscillator
     {
         public string Name { get; set; } = "RSI";
 
@@ -47,12 +47,17 @@ namespace TechnicalAnalysis.Domain
             }
             TechnicalAnalysisNameValueActionStruct technicalAnalysisStruct = new TechnicalAnalysisNameValueActionStruct();
             technicalAnalysisStruct.Name = Name;
-            if(avgGain == 0 || avgLoss == 0)
+            if (avgGain == 0 && avgLoss == 0)
             {
-                if (avgLoss == 0)
-                    technicalAnalysisStruct.Value = 100;
-                if (avgGain == 0)
-                    technicalAnalysisStruct.Value = 0;
+                technicalAnalysisStruct.Value = 50;
+            }
+            else if (avgLoss == 0)
+            {
+                technicalAnalysisStruct.Value = 100;
+            }
+            else if (avgGain == 0)
+            {
+                technicalAnalysisStruct.Value = 0;
             }
             else
             {
@@ -66,7 +71,11 @@ namespace TechnicalAnalysis.Domain
 
         public string GetAction(decimal value, decimal? extraValue = null)
         {
-            return value > 70 ? TradeAction.Sell : (value < 30 ? TradeAction.Buy : TradeAction.Neutral);
+            if (value > 70)
+                return TradeAction.Sell;
+            if (value < 30)
+                return TradeAction.Buy;
+            return TradeAction.Neutral;
         }
     }
 }

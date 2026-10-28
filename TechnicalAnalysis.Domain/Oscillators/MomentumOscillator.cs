@@ -8,7 +8,6 @@ using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
-    //
     public class MomentumOscillator : IOscillator
     {
         public string Name { get; set; } = "Momentum";
@@ -22,7 +21,7 @@ namespace TechnicalAnalysis.Domain
             if (closePrices.Count <= period)
                 throw new InvalidOperationException("Not enough data to calculate Momentum");
 
-            decimal currentClose = closePrices.Last();
+            decimal currentClose = closePrices[closePrices.Count - 1];
             decimal previousClose = closePrices[closePrices.Count - period - 1];
             technicalAnalysisStruct.Name = Name;
             technicalAnalysisStruct.Value = currentClose - previousClose;

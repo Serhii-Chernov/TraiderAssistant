@@ -1,0 +1,33 @@
+name: traider-assistant
+
+services:
+  trader-assistant-api:
+    image: traider-assistant:latest
+    build:
+      context: .
+      dockerfile: TechnicalAnalysisWebApi/Dockerfile
+    container_name: traider-assistant-api
+    restart: on-failure
+    ports:
+      - "5080:5000"
+    env_file:
+      - ./instances/trader-assistant/.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 5000
+      MachineLearning__ModelPath: /app/data/global_model.zip
+    volumes:
+      - ./instances/trader-assistant/data:/app/data
+    logging:
+      driver: local
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - default
+      - databases
+
+networks:
+  databases:
+    external: true
+    name: services_default

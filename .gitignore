@@ -402,6 +402,19 @@ FodyWeavers.xsd
 .idea/
 /.vs/SkypeRecorder/v17/DocumentLayout.json
 /.vs
+
+# Local strategy analysis artifacts
+/ForwardTest_*.png
+/forward-test_*.xlsx
+/modify-forward-test_*.xlsx
+/list.txt
+/plot_results*.py
+global_model.zip
+
+# Local Docker instance configuration and persistent data
+**/.env
+!**/.env.example
+/instances/trader-assistant/data/
 DocumentLayout.json
 /.vs/SkypeRecorder/v17
 /.vs

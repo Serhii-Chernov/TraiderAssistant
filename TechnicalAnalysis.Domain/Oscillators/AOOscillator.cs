@@ -30,23 +30,23 @@ namespace TechnicalAnalysis.Domain
             return technicalAnalysisStruct;
         }
 
-        public string GetAction(decimal value, decimal? prevValue)
+        public string GetAction(decimal value, decimal? extraValue = null)
         {
-            if (!prevValue.HasValue)
+            if (!extraValue.HasValue)
                 return TradeAction.Neutral;
 
-            if (value > 0 && prevValue.Value <= 0) return TradeAction.Buy;
-            if (value < 0 && prevValue.Value >= 0) return TradeAction.Sell;
+            if (value > 0 && extraValue.Value <= 0) return TradeAction.Buy;
+            if (value < 0 && extraValue.Value >= 0) return TradeAction.Sell;
 
             return TradeAction.Neutral;
         }
 
         private decimal CalculateLast(IEnumerable<BinanceSpotKline> data)
         {
-            var closePrices = data.Select(k => k.ClosePrice).ToList();
+            var medianPrices = data.Select(k => (k.HighPrice + k.LowPrice) / 2m).ToList();
 
-            decimal sma5 = closePrices.Skip(closePrices.Count - 5).Average();
-            decimal sma34 = closePrices.Skip(closePrices.Count - 34).Average();
+            decimal sma5 = medianPrices.TakeLast(5).Average();
+            decimal sma34 = medianPrices.TakeLast(34).Average();
 
             return sma5 - sma34;
         }

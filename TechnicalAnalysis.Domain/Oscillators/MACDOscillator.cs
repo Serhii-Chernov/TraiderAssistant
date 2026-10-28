@@ -1,5 +1,4 @@
 ﻿using Binance.Net.Objects.Models.Spot;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,8 +8,7 @@ using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
-    //
-    internal class MACDOscillator : IOscillator
+    public class MacdOscillator : IOscillator
     {
         public string Name { get; set; } = "MACD";
 
@@ -21,14 +19,14 @@ namespace TechnicalAnalysis.Domain
             int signalPeriod = 9;
 
             var closePrices = data.Select(k => k.ClosePrice).ToList();
-            if (closePrices.Count < longPeriod + signalPeriod)
+            if (closePrices.Count < longPeriod + signalPeriod - 1)
                 throw new InvalidOperationException("Not enough data to calculate MACD");
 
             var macdValues = CalculateMACD(closePrices, shortPeriod, longPeriod);
             var signalValues = CalculateEMA(macdValues, signalPeriod);
 
-            decimal macd = macdValues.Last();
-            decimal signal = signalValues.Last();
+            decimal macd = macdValues[macdValues.Count - 1];
+            decimal signal = signalValues[signalValues.Count - 1];
             decimal histogram = macd - signal; // The histogram is the MACD signal line
 
             return new TechnicalAnalysisNameValueActionStruct
@@ -54,7 +52,12 @@ namespace TechnicalAnalysis.Domain
             var shortEma = CalculateEMA(prices, shortPeriod);
             var longEma = CalculateEMA(prices, longPeriod);
 
-            return shortEma.Zip(longEma, (s, l) => s - l).ToList();
+            // EMA outputs start at different source candles, so align them by candle index.
+            int shortOffset = longPeriod - shortPeriod;
+            return shortEma
+                .Skip(shortOffset)
+                .Zip(longEma, (fast, slow) => fast - slow)
+                .ToList();
         }
 
         private List<decimal> CalculateEMA(List<decimal> data, int period)
@@ -69,7 +72,8 @@ namespace TechnicalAnalysis.Domain
             emaValues.Add(sma);
             for (int i = period; i < data.Count; i++)
             {
-                decimal ema = (data[i] - emaValues.Last()) * multiplier + emaValues.Last();
+                decimal lastEma = emaValues[emaValues.Count - 1];
+                decimal ema = (data[i] - lastEma) * multiplier + lastEma;
                 emaValues.Add(ema);
             }
 

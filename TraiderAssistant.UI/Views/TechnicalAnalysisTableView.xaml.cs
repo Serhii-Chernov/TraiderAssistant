@@ -81,16 +81,17 @@ namespace TraiderAssistant.UI.Views
             var textBlock = new TextBlock
             {
                 Text = text,
-                Margin = new Thickness(10),
+                Margin = new Thickness(10, 5, 10, 5),
                 FontWeight = isHeader ? FontWeights.Bold : FontWeights.Normal,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = isHeader ? Brushes.Black : Brushes.DarkSlateGray
             };
 
             var border = new Border
             {
-                BorderBrush = Brushes.Black,
-                BorderThickness = new Thickness(1),
+                BorderBrush = Brushes.LightGray, // Делаем линии мягкими
+                BorderThickness = new Thickness(0, 0, 0, 1), // Рисуем линию только снизу (как в современном UI)
                 Child = textBlock
             };
 

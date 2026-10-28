@@ -5,12 +5,12 @@ using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.WebApi.Controllers
 {
-
     [ApiController]
     [Route("[controller]")]
     public class AnalysisController : ControllerBase
     {
         private readonly TechnicalAnalysisService _technicalAnalysisService;
+
         public AnalysisController(TechnicalAnalysisService technicalAnalysisService)
         {
             _technicalAnalysisService = technicalAnalysisService;
@@ -19,9 +19,15 @@ namespace TechnicalAnalysis.WebApi.Controllers
         [HttpGet("Calculate")]
         public async Task<TechnicalAnalysisResult> Calculate(DateTime endTime, CurrencyPair currencyPair, KlineInterval klineInterval)
         {
+            // Получаем данные с Binance
             BinanceService _binanceService = new BinanceService();
-            var data = await _binanceService.GetChartDataForIndicatorsAsync(currencyPair,endTime, klineInterval);
-            var result = _technicalAnalysisService.PerformTechnicalAnalysis(data);
+            var data = await _binanceService.GetChartDataForIndicatorsAsync(currencyPair, endTime, klineInterval);
+
+            string asset = currencyPair.ToString();
+            string timeframe = klineInterval.ToString();
+
+            var result = _technicalAnalysisService.PerformTechnicalAnalysis(data, asset, timeframe);
+
             return result;
         }
     }
