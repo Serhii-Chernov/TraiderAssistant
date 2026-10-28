@@ -136,12 +136,13 @@ public sealed class WalkForwardStrategyService
             timeframe,
             baseCandidateCount,
             "base");
-        var baseResults = await LoadOrEvaluateBaseCandidatesAsync(
+        var baseEvaluation = await LoadOrEvaluateBaseCandidatesAsync(
             asset,
             timeframe,
             baseCandidates,
             periods,
             initialDeposit);
+        var baseResults = baseEvaluation.Results;
         var folds = new List<(WalkForwardFoldResult Report, CandidatePeriodBacktest Backtest)>();
 
         // At least two earlier calendar periods are required before an outer test.
@@ -192,15 +193,16 @@ public sealed class WalkForwardStrategyService
             searchCandidateCount,
             $"final-{periods[^1].End:yyyyMMdd}");
 
-        return CreateGroupResult(asset, timeframe, folds, finalCandidate);
+        return CreateGroupResult(asset, timeframe, folds, finalCandidate, baseEvaluation.DataQuality);
     }
 
-    private async Task<List<CandidatePeriodBacktest>> LoadOrEvaluateBaseCandidatesAsync(
-        string asset,
-        string timeframe,
-        IReadOnlyList<OptimizationInput> candidates,
-        IReadOnlyList<WalkForwardPeriod> periods,
-        decimal initialDeposit)
+    private async Task<(List<CandidatePeriodBacktest> Results, HistoricalDataQualityResult DataQuality)>
+        LoadOrEvaluateBaseCandidatesAsync(
+            string asset,
+            string timeframe,
+            IReadOnlyList<OptimizationInput> candidates,
+            IReadOnlyList<WalkForwardPeriod> periods,
+            decimal initialDeposit)
     {
         DateTime firstStart = periods.Min(period => period.Start);
         DateTime lastEnd = periods.Max(period => period.End);
@@ -225,6 +227,7 @@ public sealed class WalkForwardStrategyService
             .Where(candidateIndex => periods.Any(period =>
                 !cachedKeys.ContainsKey((candidateIndex, period.Start, period.End))))
             .ToList();
+        HistoricalDataQualityResult dataQuality = null;
 
         if (candidateIndexesToEvaluate.Count > 0)
         {
@@ -234,6 +237,7 @@ public sealed class WalkForwardStrategyService
                 candidateIndexesToEvaluate.Select(index => (Index: index, Parameters: candidates[index])).ToList(),
                 periods,
                 initialDeposit);
+            dataQuality = evaluated.FirstOrDefault()?.DataQuality;
             var rowsToAdd = evaluated
                 .Where(result => !cachedKeys.ContainsKey(
                     (result.CandidateIndex, result.Period.Start, result.Period.End)))
@@ -247,11 +251,17 @@ public sealed class WalkForwardStrategyService
             _dbContext.ChangeTracker.Clear();
         }
 
-        return (from candidateIndex in Enumerable.Range(0, candidates.Count)
+        dataQuality ??= await _backtestService.GetHistoricalDataQualityAsync(
+            asset,
+            timeframe,
+            firstStart,
+            lastEnd);
+        var results = (from candidateIndex in Enumerable.Range(0, candidates.Count)
                 from period in periods
                 let row = cachedKeys[(candidateIndex, period.Start, period.End)]
                 select FromOptimizationRun(candidateIndex, candidates[candidateIndex], period, row))
             .ToList();
+        return (results, dataQuality);
     }
 
     internal static List<OptimizationInput> CreateTrainingRows(
@@ -297,7 +307,8 @@ public sealed class WalkForwardStrategyService
         string asset,
         string timeframe,
         IReadOnlyCollection<(WalkForwardFoldResult Report, CandidatePeriodBacktest Backtest)> folds,
-        PredictedStrategyCandidate finalCandidate)
+        PredictedStrategyCandidate finalCandidate,
+        HistoricalDataQualityResult dataQuality)
     {
         decimal totalReturn = CompoundReturns(folds.Select(fold => fold.Backtest.TotalReturn));
         decimal maxDrawdown = folds.Count == 0 ? 0m : folds.Max(fold => fold.Backtest.MaxDrawdown);
@@ -356,6 +367,7 @@ public sealed class WalkForwardStrategyService
             WalkForwardScore = Math.Round(score, 2),
             FinalCandidate = finalCandidate.Parameters,
             FinalPredictedScore = finalCandidate.PredictedScore,
+            DataQuality = dataQuality,
             Folds = folds.Select(fold => fold.Report).ToList()
         };
     }

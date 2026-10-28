@@ -1,4 +1,5 @@
 using FluentAssertions;
+using TechnicalAnalysis.Domain;
 using TechnicalAnalysis.Domain.MLModels;
 using TechnicalAnalysis.Domain.Models;
 using TechnicalAnalysis.Domain.Services;
@@ -68,6 +69,65 @@ public sealed class WalkForwardTests
             new[] { period2021, period2022 })[0].RiskAdjustedScore;
 
         after.Should().Be(before);
+    }
+
+    [Fact]
+    public void DataQuality_ShouldAllowMissingRateAtConfiguredLimit()
+    {
+        DateTime start = new(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        TimeSpan interval = TimeSpan.FromMinutes(15);
+        var openTimes = Enumerable.Range(0, 1000)
+            .Where(index => index is < 200 or > 204)
+            .Select(index => start.AddTicks(interval.Ticks * index))
+            .ToList();
+
+        HistoricalDataQualityResult quality = BinanceService.AnalyzeDataQuality(
+            "ETHUSDT",
+            "FifteenMinutes",
+            openTimes,
+            interval);
+
+        quality.ActualCandles.Should().Be(995);
+        quality.ExpectedCandles.Should().Be(1000);
+        quality.MissingCandles.Should().Be(5);
+        quality.MissingPercent.Should().Be(BinanceService.MaximumMissingCandlePercent);
+        quality.MaximumGapCandles.Should().Be(5);
+        quality.Gaps.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void DataQuality_ShouldRejectIndividualGapLongerThanOneDay()
+    {
+        DateTime start = new(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Action action = () => BinanceService.AnalyzeDataQuality(
+            "ETHUSDT",
+            "FifteenMinutes",
+            new[] { start, start.AddHours(25) },
+            TimeSpan.FromMinutes(15));
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*exceeds 24 hours*");
+    }
+
+    [Fact]
+    public void DataQuality_ShouldRejectMissingRateAboveConfiguredLimit()
+    {
+        DateTime start = new(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        TimeSpan interval = TimeSpan.FromMinutes(15);
+        var openTimes = Enumerable.Range(0, 100)
+            .Where(index => index != 50)
+            .Select(index => start.AddTicks(interval.Ticks * index))
+            .ToList();
+
+        Action action = () => BinanceService.AnalyzeDataQuality(
+            "ETHUSDT",
+            "FifteenMinutes",
+            openTimes,
+            interval);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*limit is*");
     }
 
     private static WalkForwardPeriod Period(int year) => new(

@@ -32,7 +32,33 @@ public sealed class WalkForwardStrategyResult
     public decimal WalkForwardScore { get; set; }
     public OptimizationInput FinalCandidate { get; set; }
     public float FinalPredictedScore { get; set; }
+    public HistoricalDataQualityResult DataQuality { get; set; }
     public List<WalkForwardFoldResult> Folds { get; set; } = new();
+}
+
+public sealed class HistoricalDataQualityResult
+{
+    public string Asset { get; set; }
+    public string Timeframe { get; set; }
+    public int ActualCandles { get; set; }
+    public int ExpectedCandles { get; set; }
+    public int MissingCandles { get; set; }
+    public decimal MissingPercent { get; set; }
+    public int MaximumGapCandles { get; set; }
+    public List<HistoricalDataGap> Gaps { get; set; } = new();
+}
+
+public sealed class HistoricalDataGap
+{
+    public DateTime ExpectedOpenTime { get; set; }
+    public DateTime ReceivedOpenTime { get; set; }
+    public int MissingCandles { get; set; }
+}
+
+internal sealed class HistoricalDataBatch
+{
+    public List<Binance.Net.Objects.Models.Spot.BinanceSpotKline> Candles { get; set; } = new();
+    public HistoricalDataQualityResult Quality { get; set; }
 }
 
 public sealed class WalkForwardFoldResult
@@ -67,4 +93,5 @@ internal sealed class CandidatePeriodBacktest
     public decimal SharpeRatio { get; set; }
     public decimal GrossProfit { get; set; }
     public decimal GrossLoss { get; set; }
+    public HistoricalDataQualityResult DataQuality { get; set; }
 }

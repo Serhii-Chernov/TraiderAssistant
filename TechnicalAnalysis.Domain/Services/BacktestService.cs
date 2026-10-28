@@ -797,11 +797,12 @@ namespace TechnicalAnalysis.Domain.Services
 
             int intervalMinutes = _binanceService.GetIntervalInMinutes(interval);
             DateTime warmUpStartTime = firstStart.AddMinutes(-1 * WarmUpCandlesCount * intervalMinutes);
-            var historyData = (await _binanceService.GetFullHistoryDataAsync(
+            var historyBatch = await _binanceService.GetFullHistoryDataBatchAsync(
                 pair,
                 interval,
                 warmUpStartTime,
-                lastEnd)).ToList();
+                lastEnd);
+            var historyData = historyBatch.Candles;
             int firstStartIndex = GetSimulationStartIndex(historyData, firstStart);
             var snapshots = BuildCandleSnapshots(
                 historyData,
@@ -841,12 +842,34 @@ namespace TechnicalAnalysis.Domain.Services
                         ProfitFactor = result.ProfitFactor,
                         SharpeRatio = result.SharpeRatio,
                         GrossProfit = result.GrossProfit,
-                        GrossLoss = result.GrossLoss
+                        GrossLoss = result.GrossLoss,
+                        DataQuality = historyBatch.Quality
                     });
                 }
             }
 
             return results;
+        }
+
+        internal async Task<HistoricalDataQualityResult> GetHistoricalDataQualityAsync(
+            string asset,
+            string timeframe,
+            DateTime startTime,
+            DateTime endTime)
+        {
+            if (!Enum.TryParse<CurrencyPair>(asset, out var pair))
+                throw new ArgumentException($"Unknown currency pair '{asset}'.", nameof(asset));
+            if (!Enum.TryParse<KlineInterval>(timeframe, out var interval))
+                throw new ArgumentException($"Unknown timeframe '{timeframe}'.", nameof(timeframe));
+
+            int intervalMinutes = _binanceService.GetIntervalInMinutes(interval);
+            DateTime warmUpStartTime = startTime.AddMinutes(-1 * WarmUpCandlesCount * intervalMinutes);
+            var historyBatch = await _binanceService.GetFullHistoryDataBatchAsync(
+                pair,
+                interval,
+                warmUpStartTime,
+                endTime);
+            return historyBatch.Quality;
         }
 
         internal static StrategyCandidateValidationResult CreateCandidateValidationResult(
