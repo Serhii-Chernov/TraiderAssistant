@@ -28,6 +28,20 @@ public class OptimizationAndMachineLearningTests
             .Should().NotBe(baseline);
     }
 
+    [Theory]
+    [InlineData(0, 200)]
+    [InlineData(1, 199)]
+    [InlineData(125, 75)]
+    [InlineData(200, 0)]
+    [InlineData(250, 0)]
+    public void RemainingOptimizationCombinations_UsesTargetAsTotalCount(
+        int existingCount,
+        int expectedRemaining)
+    {
+        BacktestService.CalculateRemainingOptimizationCombinations(existingCount)
+            .Should().Be(expectedRemaining);
+    }
+
     [Fact]
     public void FeatureColumns_IncludeEncodedAsset()
     {

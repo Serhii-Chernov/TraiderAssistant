@@ -25,6 +25,7 @@ namespace TechnicalAnalysis.Domain.Services
         private readonly ILogger<BacktestService> _logger;
         private const decimal TradingFee = 0.001m;
         private const int WarmUpCandlesCount = 300;
+        internal const int TargetOptimizationCombinationsPerInterval = 200;
 
         public BacktestService(BinanceService binanceService, TechnicalAnalysisService analysisService, AppDbContext dbContext, ILogger<BacktestService> logger)
         {
@@ -268,7 +269,6 @@ namespace TechnicalAnalysis.Domain.Services
             ValidateBacktestRequest(startDate, endDate, initialDeposit);
 
             var results = new List<BacktestResult>();
-            int newCombinationsToTest = 200;
 
             var existingRuns = await _dbContext.OptimizationRuns
                 .Select(r => new { r.Asset, r.Timeframe, r.IndicatorWeightsJson })
@@ -293,6 +293,33 @@ namespace TechnicalAnalysis.Domain.Services
 
             foreach (var interval in intervalsToCheck)
             {
+                var asset = pair.ToString();
+                var timeframe = interval.ToString();
+                var existingCombinationCount = existingRuns
+                    .Where(run => run.Asset == asset && run.Timeframe == timeframe)
+                    .Select(run => run.IndicatorWeightsJson)
+                    .Distinct(StringComparer.Ordinal)
+                    .Count();
+                var combinationsToTest = CalculateRemainingOptimizationCombinations(existingCombinationCount);
+
+                if (combinationsToTest == 0)
+                {
+                    _logger.LogInformation(
+                        "Optimization skipped for {Pair} {Interval}: target of {TargetCount} combinations is already reached.",
+                        pair,
+                        interval,
+                        TargetOptimizationCombinationsPerInterval);
+                    continue;
+                }
+
+                _logger.LogInformation(
+                    "Optimization will resume for {Pair} {Interval}. Existing: {ExistingCount}, Remaining: {RemainingCount}, Target: {TargetCount}.",
+                    pair,
+                    interval,
+                    existingCombinationCount,
+                    combinationsToTest,
+                    TargetOptimizationCombinationsPerInterval);
+
                 try
                 {
                     int intervalMinutes = _binanceService.GetIntervalInMinutes(interval);
@@ -317,14 +344,15 @@ namespace TechnicalAnalysis.Domain.Services
                     Console.WriteLine($"[{pair}] ({interval}) Pre-calculation FINISHED!");
 
                     // === 2. СВЕРХБЫСТРОЕ ПАРАЛЛЕЛЬНОЕ ТЕСТИРОВАНИЕ КОМБИНАЦИЙ ===
-                    Console.WriteLine($"Testing {newCombinationsToTest} combinations in parallel for {interval}...");
+                    Console.WriteLine($"Testing {combinationsToTest} remaining combinations in parallel for {interval}...");
                     var runsToSave = new ConcurrentBag<OptimizationRun>();
                     var concurrentResults = new ConcurrentBag<BacktestResult>();
 
-                    Parallel.For(0, newCombinationsToTest, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 4) }, i =>
+                    Parallel.For(0, combinationsToTest, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 4) }, i =>
                     {
                         var rnd = new Random(Guid.NewGuid().GetHashCode());
                         string combinedWeightsJson;
+                        var candidateOrdinal = existingCombinationCount + i;
 
                         decimal[] oscWeightsArr = new decimal[11];
                         decimal[] maWeightsArr = new decimal[13];
@@ -337,7 +365,7 @@ namespace TechnicalAnalysis.Domain.Services
                             Dictionary<string, decimal> oscDict;
                             Dictionary<string, decimal> maDict;
 
-                            if (i == 0)
+                            if (candidateOrdinal == 0)
                             {
                                 // ЕТАЛОН 1: Класичний трейдинг (людська логіка)
                                 oscDict = GetDefaultOscillatorWeights();
@@ -349,7 +377,7 @@ namespace TechnicalAnalysis.Domain.Services
                                 oscGroupWeight = 0.5m;
                                 maGroupWeight = 0.5m;
                             }
-                            else if (i == 1)
+                            else if (candidateOrdinal == 1)
                             {
                                 // ЕТАЛОН 2: Динамічний Победитель від ІА
                                 var aiBenchmark = GetAIBenchmark(interval);
@@ -400,10 +428,10 @@ namespace TechnicalAnalysis.Domain.Services
                             {
                                 break;
                             }
-                            else
-                            {
-                                if (i == 0 || i == 1) return; // exit this iteration
-                            }
+
+                            // A benchmark may already exist in an unusual partial dataset.
+                            // Fall back to a random candidate so the target count is still reached.
+                            candidateOrdinal = 2;
                         }
 
                         // Запускаем симуляцию
@@ -444,7 +472,13 @@ namespace TechnicalAnalysis.Domain.Services
                     _dbContext.ChangeTracker.Clear();
 
                     results.AddRange(concurrentResults);
-                    Console.WriteLine($"[{interval}] Done!");
+                    _logger.LogInformation(
+                        "Optimization completed for {Pair} {Interval}. Added: {AddedCount}, Total: {TotalCount}/{TargetCount}.",
+                        pair,
+                        interval,
+                        runsToSave.Count,
+                        existingCombinationCount + runsToSave.Count,
+                        TargetOptimizationCombinationsPerInterval);
                 }
                 catch (Exception ex)
                 {
@@ -458,6 +492,18 @@ namespace TechnicalAnalysis.Domain.Services
 
         internal static string GetOptimizationCombinationKey(string asset, string timeframe, string weightsJson) =>
             $"{asset}\u001F{timeframe}\u001F{weightsJson}";
+
+        internal static int CalculateRemainingOptimizationCombinations(
+            int existingCombinationCount,
+            int targetCombinationCount = TargetOptimizationCombinationsPerInterval)
+        {
+            if (existingCombinationCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(existingCombinationCount));
+            if (targetCombinationCount <= 0)
+                throw new ArgumentOutOfRangeException(nameof(targetCombinationCount));
+
+            return Math.Max(0, targetCombinationCount - existingCombinationCount);
+        }
 
         // Одиночный запуск (старый)
         public async Task<BacktestResult> RunBacktestAsync(CurrencyPair pair, DateTime startTime, DateTime endTime, decimal initialDeposit, KlineInterval interval)
