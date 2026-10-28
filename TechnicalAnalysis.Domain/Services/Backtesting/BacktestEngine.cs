@@ -22,9 +22,11 @@ internal static class BacktestEngine
         int simulationStartIndex,
         decimal initialDeposit,
         BacktestSettings settings,
-        bool trackTrades)
+        bool trackTrades,
+        int? simulationEndIndex = null)
     {
-        ValidateInputs(candles, simulationStartIndex, initialDeposit, settings);
+        int lastIndex = simulationEndIndex ?? candles.Count - 1;
+        ValidateInputs(candles, simulationStartIndex, lastIndex, initialDeposit, settings);
 
         var result = new BacktestResult
         {
@@ -85,7 +87,7 @@ internal static class BacktestEngine
             }
         }
 
-        for (int index = simulationStartIndex; index < candles.Count; index++)
+        for (int index = simulationStartIndex; index <= lastIndex; index++)
         {
             var candle = candles[index];
 
@@ -130,7 +132,7 @@ internal static class BacktestEngine
                 }
             }
 
-            bool hasNextCandle = index + 1 < candles.Count;
+            bool hasNextCandle = index < lastIndex;
             bool hasSignals = candle.OscillatorActions.Length == settings.OscillatorWeights.Length &&
                               candle.MovingAverageActions.Length == settings.MovingAverageWeights.Length;
 
@@ -144,7 +146,7 @@ internal static class BacktestEngine
                     pendingOrder = PendingOrder.Exit;
             }
 
-            bool isLastCandle = index == candles.Count - 1;
+            bool isLastCandle = index == lastIndex;
             if (isLastCandle && cryptoAmount > 0m)
                 ClosePosition(candle.ClosePrice, candle.OpenTime, "End of Test");
 
@@ -273,6 +275,7 @@ internal static class BacktestEngine
     private static void ValidateInputs(
         IReadOnlyList<BacktestCandleSnapshot> candles,
         int simulationStartIndex,
+        int simulationEndIndex,
         decimal initialDeposit,
         BacktestSettings settings)
     {
@@ -280,6 +283,8 @@ internal static class BacktestEngine
             throw new ArgumentException("Backtest candles are required.", nameof(candles));
         if (simulationStartIndex < 0 || simulationStartIndex >= candles.Count)
             throw new ArgumentOutOfRangeException(nameof(simulationStartIndex));
+        if (simulationEndIndex < simulationStartIndex || simulationEndIndex >= candles.Count)
+            throw new ArgumentOutOfRangeException(nameof(simulationEndIndex));
         if (initialDeposit <= 0m)
             throw new ArgumentOutOfRangeException(nameof(initialDeposit), "Initial deposit must be positive.");
         if (settings.OscillatorWeights == null || settings.OscillatorWeights.Length == 0)

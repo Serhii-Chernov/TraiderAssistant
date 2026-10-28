@@ -223,14 +223,46 @@ namespace TechnicalAnalysis.WebApi.Controllers
             return Ok(result);
         }
 
-        [HttpGet("PredictBestStrategies")] // Название эндпоинта можно сделать во множественном числе
-        public async Task<IActionResult> PredictBestStrategies()
+        [HttpGet("PredictBestStrategies")]
+        public async Task<IActionResult> PredictBestStrategies(
+            int candidatesPerStrategy = 20,
+            int searchCombinationsPerStrategy = 10000)
         {
             try
             {
                 var mlService = HttpContext.RequestServices.GetRequiredService<MachineLearningService>();
-                // Вызываем новый метод без параметров
-                var result = await mlService.FindBestStrategiesForAllTimeframes();
+                var result = await mlService.GenerateCandidatePreviewAsync(
+                    candidatesPerStrategy,
+                    searchCombinationsPerStrategy);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("BuildValidatedStrategies")]
+        public async Task<IActionResult> BuildValidatedStrategies(
+            DateTime startDate,
+            DateTime endDate,
+            decimal initialDeposit = 1000,
+            int candidatesPerStrategy = 20,
+            int searchCombinationsPerStrategy = 10000)
+        {
+            if (endDate <= startDate)
+                return BadRequest("End date must be greater than start date.");
+
+            try
+            {
+                var validationService =
+                    HttpContext.RequestServices.GetRequiredService<StrategyValidationService>();
+                var result = await validationService.BuildValidatedStrategiesAsync(
+                    startDate,
+                    endDate,
+                    initialDeposit,
+                    candidatesPerStrategy,
+                    searchCombinationsPerStrategy);
                 return Ok(result);
             }
             catch (Exception ex)

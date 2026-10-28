@@ -679,6 +679,165 @@ namespace TechnicalAnalysis.Domain.Services
             return Math.Max(0, targetCombinationCount - existingCombinationCount);
         }
 
+        public async Task<List<StrategyCandidateValidationResult>> ValidateCandidatesAsync(
+            string asset,
+            string timeframe,
+            IReadOnlyList<PredictedStrategyCandidate> candidates,
+            DateTime startTime,
+            DateTime endTime,
+            decimal initialDeposit)
+        {
+            ValidateBacktestRequest(startTime, endTime, initialDeposit);
+            if (!Enum.TryParse<CurrencyPair>(asset, out var pair))
+                throw new ArgumentException($"Unknown currency pair '{asset}'.", nameof(asset));
+            if (!Enum.TryParse<KlineInterval>(timeframe, out var interval))
+                throw new ArgumentException($"Unknown timeframe '{timeframe}'.", nameof(timeframe));
+            if (candidates.Count == 0)
+                return new List<StrategyCandidateValidationResult>();
+
+            int intervalMinutes = _binanceService.GetIntervalInMinutes(interval);
+            DateTime warmUpStartTime = startTime.AddMinutes(-1 * WarmUpCandlesCount * intervalMinutes);
+            var rawData = await _binanceService.GetFullHistoryDataAsync(pair, interval, warmUpStartTime, endTime);
+            var historyData = rawData.ToList();
+            int fullStartIndex = GetSimulationStartIndex(historyData, startTime);
+            int fullEndIndex = GetSimulationEndIndex(historyData, endTime);
+            var snapshots = BuildCandleSnapshots(
+                historyData,
+                fullStartIndex,
+                GetOscillatorKeys(),
+                GetMovingAverageKeys());
+            var periods = CreateValidationPeriods(startTime, endTime);
+            var evaluations = new List<StrategyCandidateValidationResult>(candidates.Count);
+
+            for (int candidateIndex = 0; candidateIndex < candidates.Count; candidateIndex++)
+            {
+                var candidate = candidates[candidateIndex];
+                var settings = CreateBacktestSettings(candidate.Parameters);
+                var fullResult = BacktestEngine.Run(
+                    snapshots,
+                    fullStartIndex,
+                    initialDeposit,
+                    settings,
+                    trackTrades: false,
+                    simulationEndIndex: fullEndIndex);
+                var periodResults = new List<StrategyPeriodValidationResult>(periods.Count);
+
+                foreach (var period in periods)
+                {
+                    int periodStartIndex = GetSimulationStartIndex(historyData, period.Start);
+                    int periodEndIndex = GetSimulationEndIndex(historyData, period.End);
+                    var periodResult = BacktestEngine.Run(
+                        snapshots,
+                        periodStartIndex,
+                        initialDeposit,
+                        settings,
+                        trackTrades: false,
+                        simulationEndIndex: periodEndIndex);
+
+                    periodResults.Add(new StrategyPeriodValidationResult
+                    {
+                        Year = period.Year,
+                        TotalTrades = periodResult.TotalTrades,
+                        TotalReturn = Math.Round(periodResult.ProfitPercentage, 2),
+                        MaxDrawdown = Math.Round(periodResult.MaxDrawdown, 2)
+                    });
+                }
+
+                var evaluation = CreateCandidateValidationResult(
+                    candidate,
+                    candidateIndex + 1,
+                    fullResult,
+                    periodResults);
+                evaluations.Add(evaluation);
+
+                _logger.LogInformation(
+                    "Candidate validated. Asset: {Asset}, Timeframe: {Timeframe}, Candidate: {Candidate}/{CandidateCount}, PredictedScore: {PredictedScore}, ActualScore: {ActualScore}, Accepted: {Accepted}",
+                    asset,
+                    timeframe,
+                    candidateIndex + 1,
+                    candidates.Count,
+                    candidate.PredictedScore,
+                    evaluation.ActualScore,
+                    evaluation.IsAccepted);
+            }
+
+            return evaluations;
+        }
+
+        internal static StrategyCandidateValidationResult CreateCandidateValidationResult(
+            PredictedStrategyCandidate candidate,
+            int rank,
+            BacktestResult fullResult,
+            IReadOnlyList<StrategyPeriodValidationResult> periods)
+        {
+            decimal actualScore = fullResult.ProfitPercentage
+                                  - MachineLearningService.DrawdownPenaltyWeight * fullResult.MaxDrawdown;
+            int positivePeriods = periods.Count(period => period.TotalReturn > 0m);
+            int requiredPositivePeriods = (int)Math.Ceiling(periods.Count * 0.6m);
+            decimal positivePeriodProfit = periods
+                .Where(period => period.TotalReturn > 0m)
+                .Sum(period => period.TotalReturn);
+            decimal bestPeriodProfit = periods.Count == 0 ? 0m : periods.Max(period => period.TotalReturn);
+            decimal bestPeriodProfitShare = positivePeriodProfit <= 0m
+                ? 0m
+                : Math.Max(0m, bestPeriodProfit) / positivePeriodProfit * 100m;
+            var rejectionReasons = new List<string>();
+
+            if (fullResult.TotalTrades < MachineLearningService.PreferredTrainingTrades)
+                rejectionReasons.Add($"fewer than {MachineLearningService.PreferredTrainingTrades} trades");
+            if (fullResult.ProfitPercentage <= 0m)
+                rejectionReasons.Add("non-positive return");
+            if (actualScore <= 0m)
+                rejectionReasons.Add("non-positive actual risk-adjusted score");
+            if (fullResult.ProfitFactor < 1.1m)
+                rejectionReasons.Add("profit factor below 1.1");
+            if (positivePeriods < requiredPositivePeriods)
+                rejectionReasons.Add($"positive in fewer than {requiredPositivePeriods} validation periods");
+            if (bestPeriodProfitShare > 50m)
+                rejectionReasons.Add("more than 50% of positive profit comes from one validation period");
+            if (fullResult.MaxDrawdown > fullResult.ProfitPercentage)
+                rejectionReasons.Add("drawdown exceeds return");
+
+            return new StrategyCandidateValidationResult
+            {
+                Rank = rank,
+                PredictedScore = candidate.PredictedScore,
+                ActualScore = Math.Round(actualScore, 2),
+                TotalTrades = fullResult.TotalTrades,
+                TotalReturn = Math.Round(fullResult.ProfitPercentage, 2),
+                MaxDrawdown = Math.Round(fullResult.MaxDrawdown, 2),
+                ProfitFactor = fullResult.ProfitFactor == decimal.MaxValue
+                    ? null
+                    : Math.Round(fullResult.ProfitFactor, 2),
+                SharpeRatio = Math.Round(fullResult.SharpeRatio, 2),
+                PositivePeriods = positivePeriods,
+                RequiredPositivePeriods = requiredPositivePeriods,
+                BestPeriodProfitShare = Math.Round(bestPeriodProfitShare, 2),
+                IsAccepted = rejectionReasons.Count == 0,
+                RejectionReasons = rejectionReasons,
+                Parameters = candidate.Parameters,
+                Periods = periods.ToList()
+            };
+        }
+
+        private static List<(int Year, DateTime Start, DateTime End)> CreateValidationPeriods(
+            DateTime startTime,
+            DateTime endTime)
+        {
+            var periods = new List<(int Year, DateTime Start, DateTime End)>();
+            for (int year = startTime.Year; year <= endTime.AddTicks(-1).Year; year++)
+            {
+                var yearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                var nextYear = yearStart.AddYears(1);
+                var periodStart = startTime > yearStart ? startTime : yearStart;
+                var periodEnd = endTime < nextYear ? endTime : nextYear;
+                if (periodEnd > periodStart)
+                    periods.Add((year, periodStart, periodEnd));
+            }
+
+            return periods;
+        }
+
         // Одиночный запуск (старый)
         public async Task<BacktestResult> RunBacktestAsync(CurrencyPair pair, DateTime startTime, DateTime endTime,
             decimal initialDeposit, KlineInterval interval)
@@ -805,6 +964,63 @@ namespace TechnicalAnalysis.Domain.Services
                     "Historical data does not contain candles after the simulation start.");
 
             return simulationStartIndex;
+        }
+
+        private static int GetSimulationEndIndex(
+            IReadOnlyList<BinanceSpotKline> historyData,
+            DateTime endTimeExclusive)
+        {
+            for (int index = historyData.Count - 1; index >= 0; index--)
+            {
+                if (historyData[index].OpenTime < endTimeExclusive)
+                    return index;
+            }
+
+            throw new InvalidOperationException("Historical data does not contain candles before the requested end time.");
+        }
+
+        private static BacktestSettings CreateBacktestSettings(OptimizationInput parameters)
+        {
+            decimal[] oscillatorWeights =
+            {
+                (decimal)parameters.RsiWeight,
+                (decimal)parameters.StochasticKWeight,
+                (decimal)parameters.CciWeight,
+                (decimal)parameters.AdxWeight,
+                (decimal)parameters.AoWeight,
+                (decimal)parameters.MomentumWeight,
+                (decimal)parameters.MacdWeight,
+                (decimal)parameters.UltimateWeight,
+                (decimal)parameters.WilliamsRWeight,
+                (decimal)parameters.BullBearWeight,
+                (decimal)parameters.StochasticRsiWeight
+            };
+            decimal[] movingAverageWeights =
+            {
+                (decimal)parameters.Sma10Weight,
+                (decimal)parameters.Ema10Weight,
+                (decimal)parameters.Sma20Weight,
+                (decimal)parameters.Ema20Weight,
+                (decimal)parameters.Sma30Weight,
+                (decimal)parameters.Ema30Weight,
+                (decimal)parameters.Sma50Weight,
+                (decimal)parameters.Ema50Weight,
+                (decimal)parameters.Sma100Weight,
+                (decimal)parameters.Ema100Weight,
+                (decimal)parameters.Sma200Weight,
+                (decimal)parameters.Ema200Weight,
+                (decimal)parameters.Hma9Weight
+            };
+
+            return CreateBacktestSettings(
+                oscillatorWeights,
+                movingAverageWeights,
+                (decimal)parameters.OscillatorGroupWeight,
+                (decimal)parameters.MaGroupWeight,
+                (int)parameters.BuyThreshold,
+                (int)parameters.SellThreshold,
+                (decimal)parameters.StopLoss,
+                (decimal)parameters.TakeProfit);
         }
 
         private static BacktestSettings CreateBacktestSettings(

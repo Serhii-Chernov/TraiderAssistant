@@ -1,4 +1,6 @@
 using FluentAssertions;
+using TechnicalAnalysis.Domain.MLModels;
+using TechnicalAnalysis.Domain.Models;
 using TechnicalAnalysis.Domain.Services;
 using TechnicalAnalysis.Domain.Services.Backtesting;
 using TechnicalAnalysis.Shared;
@@ -158,6 +160,29 @@ public class BacktestEngineTests
         BacktestEngine.CalculateTradeMaxDrawdown(trades).Should().Be(10m);
     }
 
+    [Fact]
+    public void Run_WithEndIndex_ShouldIgnoreLaterCandles()
+    {
+        var candles = new[]
+        {
+            Candle(0, 100m, 100m, 100m, 100m, signal: 1m),
+            Candle(1, 100m, 100m, 100m, 100m),
+            Candle(2, 110m, 110m, 110m, 110m),
+            Candle(3, 1_000m, 1_000m, 1_000m, 1_000m)
+        };
+
+        var result = BacktestEngine.Run(
+            candles,
+            0,
+            1_000m,
+            Settings(fee: 0m),
+            trackTrades: true,
+            simulationEndIndex: 2);
+
+        result.FinalBalance.Should().Be(1_100m);
+        result.Trades.Should().ContainSingle().Which.ExitPrice.Should().Be(110m);
+    }
+
     /// <summary>
     /// Verifies annualization of daily equity returns for a continuously traded crypto market.
     /// </summary>
@@ -218,6 +243,69 @@ public class BacktestEngineTests
         };
 
         BacktestService.CalculateMaxConsecutiveLosses(trades).Should().Be(2);
+    }
+
+    [Fact]
+    public void CandidateValidation_ShouldRejectProfitConcentratedInOneYear()
+    {
+        var candidate = new PredictedStrategyCandidate
+        {
+            PredictedScore = 100f,
+            Parameters = new OptimizationInput()
+        };
+        var fullResult = new BacktestResult
+        {
+            TotalTrades = 50,
+            ProfitPercentage = 20m,
+            MaxDrawdown = 5m,
+            ProfitFactor = 1.5m,
+            SharpeRatio = 1m
+        };
+        var periods = new[]
+        {
+            Period(2021, 18m),
+            Period(2022, 1m),
+            Period(2023, 1m),
+            Period(2024, -1m),
+            Period(2025, -1m)
+        };
+
+        var result = BacktestService.CreateCandidateValidationResult(candidate, 1, fullResult, periods);
+
+        result.IsAccepted.Should().BeFalse();
+        result.RejectionReasons.Should().Contain(reason => reason.Contains("one validation period"));
+    }
+
+    [Fact]
+    public void CandidateValidation_ShouldAcceptDiversifiedProfitableCandidate()
+    {
+        var candidate = new PredictedStrategyCandidate
+        {
+            PredictedScore = 50f,
+            Parameters = new OptimizationInput()
+        };
+        var fullResult = new BacktestResult
+        {
+            TotalTrades = 60,
+            ProfitPercentage = 30m,
+            MaxDrawdown = 10m,
+            ProfitFactor = 1.5m,
+            SharpeRatio = 1m
+        };
+        var periods = new[]
+        {
+            Period(2021, 5m),
+            Period(2022, 6m),
+            Period(2023, 7m),
+            Period(2024, 5m),
+            Period(2025, 7m)
+        };
+
+        var result = BacktestService.CreateCandidateValidationResult(candidate, 1, fullResult, periods);
+
+        result.IsAccepted.Should().BeTrue();
+        result.ActualScore.Should().Be(15m);
+        result.PositivePeriods.Should().Be(5);
     }
 
     /// <summary>
@@ -281,5 +369,11 @@ public class BacktestEngineTests
         ExitTime = exitTime,
         ProfitPercent = profitPercent,
         Profit = profitPercent
+    };
+
+    private static StrategyPeriodValidationResult Period(int year, decimal totalReturn) => new()
+    {
+        Year = year,
+        TotalReturn = totalReturn
     };
 }
