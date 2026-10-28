@@ -109,6 +109,39 @@ public class IndicatorReferenceTests
     }
 
     /// <summary>
+    /// Verifies that CCI remains neutral when all typical prices are identical.
+    /// </summary>
+    [Fact]
+    public void Cci_WithFlatPrices_ShouldReturnZero()
+    {
+        var result = new CciOscillator().Calculate(CreateKlines(Enumerable.Repeat(100m, 20)));
+
+        result.Value.Should().Be(0m);
+        result.Action.Should().Be(TradeAction.Neutral);
+    }
+
+    /// <summary>
+    /// Verifies that CCI does not underflow its denominator when mean deviation is tiny but non-zero.
+    /// </summary>
+    [Fact]
+    public void Cci_WithTinyMeanDeviation_ShouldAvoidDecimalUnderflow()
+    {
+        var prices = Enumerable.Repeat(1m, 19)
+            .Append(1.00000000000000000000000001m)
+            .ToList();
+        decimal sma = prices.Average();
+        decimal meanDeviation = prices.Select(price => Math.Abs(price - sma)).Average();
+        decimal expected = (prices[^1] - sma) / meanDeviation / 0.015m;
+
+        meanDeviation.Should().NotBe(0m);
+        (0.015m * meanDeviation).Should().Be(0m, "this reproduces the original decimal underflow");
+
+        var result = new CciOscillator().Calculate(CreateKlines(prices));
+
+        result.Value.Should().Be(expected);
+    }
+
+    /// <summary>
     /// Verifies inclusive boundaries used to classify aggregate indicator values.
     /// </summary>
     [Theory]
