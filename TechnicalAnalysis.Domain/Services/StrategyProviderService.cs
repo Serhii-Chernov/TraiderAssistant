@@ -26,7 +26,9 @@ namespace TechnicalAnalysis.Domain.Services
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            var activeStrategies = await dbContext.ActiveStrategies.ToListAsync();
+            var activeStrategies = await dbContext.ActiveStrategies
+                .Where(strategy => strategy.SelectionMethod == "WalkForward")
+                .ToListAsync();
 
             _cache.Clear();
 

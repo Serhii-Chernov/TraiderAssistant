@@ -6,6 +6,7 @@ namespace TechnicalAnalysis.Domain.Services.Backtesting;
 internal sealed class BacktestCandleSnapshot
 {
     public DateTime OpenTime { get; init; }
+    public DateTime CloseTime { get; init; }
     public decimal OpenPrice { get; init; }
     public decimal HighPrice { get; init; }
     public decimal LowPrice { get; init; }
@@ -26,4 +27,10 @@ internal sealed record BacktestSettings(
     int SellThreshold,
     decimal StopLoss,
     decimal TakeProfit,
-    decimal TradingFee);
+    decimal TradingFee)
+{
+    /// <summary>
+    /// Adverse execution slippage applied to every entry and exit fill.
+    /// </summary>
+    public decimal Slippage { get; init; }
+}

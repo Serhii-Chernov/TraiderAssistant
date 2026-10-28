@@ -18,7 +18,6 @@ namespace TechnicalAnalysis.Domain.Services
     {
         private readonly AppDbContext _dbContext;
         private readonly MLContext _mlContext;
-        private readonly StrategyProviderService _strategyProvider;
         private readonly string _modelPath;
 
         internal const int MinimumTrainingTrades = 10;
@@ -56,7 +55,6 @@ namespace TechnicalAnalysis.Domain.Services
             IConfiguration configuration = null)
         {
             _dbContext = dbContext;
-            _strategyProvider = strategyProvider;
             _modelPath = configuration?["MachineLearning:ModelPath"] ?? "global_model.zip";
             _mlContext = new MLContext(seed: 42); // Фіксований seed для стабільності
         }
@@ -68,7 +66,8 @@ namespace TechnicalAnalysis.Domain.Services
             if (!File.Exists(_modelPath))
                 throw new InvalidOperationException("Модель еще не обучена. Сначала вызовите TrainModel.");
             if (candidatesPerStrategy <= 0 || candidatesPerStrategy > 100)
-                throw new ArgumentOutOfRangeException(nameof(candidatesPerStrategy), "Candidate count must be between 1 and 100.");
+                throw new ArgumentOutOfRangeException(nameof(candidatesPerStrategy),
+                    "Candidate count must be between 1 and 100.");
             if (searchCombinationsPerStrategy < candidatesPerStrategy)
                 throw new ArgumentOutOfRangeException(nameof(searchCombinationsPerStrategy));
 
@@ -112,7 +111,8 @@ namespace TechnicalAnalysis.Domain.Services
                         int worstIndex = 0;
                         for (int candidateIndex = 1; candidateIndex < bestCandidates.Count; candidateIndex++)
                         {
-                            if (bestCandidates[candidateIndex].PredictedScore < bestCandidates[worstIndex].PredictedScore)
+                            if (bestCandidates[candidateIndex].PredictedScore <
+                                bestCandidates[worstIndex].PredictedScore)
                                 worstIndex = candidateIndex;
                         }
 
@@ -124,6 +124,61 @@ namespace TechnicalAnalysis.Domain.Services
             }
 
             return preview;
+        }
+
+        internal ITransformer TrainWalkForwardModel(IReadOnlyList<OptimizationInput> trainingRows)
+        {
+            if (trainingRows == null || trainingRows.Count < 100)
+                throw new ArgumentException("At least 100 walk-forward training rows are required.",
+                    nameof(trainingRows));
+
+            IDataView dataView = _mlContext.Data.LoadFromEnumerable(trainingRows);
+            var pipeline = _mlContext.Transforms
+                .Categorical.OneHotEncoding("TimeframeEncoded", nameof(OptimizationInput.Timeframe))
+                .Append(_mlContext.Transforms.Categorical.OneHotEncoding(
+                    "AssetEncoded",
+                    nameof(OptimizationInput.Asset)))
+                .Append(_mlContext.Transforms.Concatenate("Features", FeatureColumnNames))
+                .Append(_mlContext.Regression.Trainers.FastTree(
+                    labelColumnName: "Label",
+                    featureColumnName: "Features"));
+
+            return pipeline.Fit(dataView);
+        }
+
+        internal PredictedStrategyCandidate PredictBestWalkForwardCandidate(
+            ITransformer model,
+            string asset,
+            string timeframe,
+            int searchCandidateCount,
+            string seedScope)
+        {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+
+            var predictionEngine = _mlContext.Model
+                .CreatePredictionEngine<OptimizationInput, OptimizationPrediction>(model);
+            PredictedStrategyCandidate best = null;
+            foreach (var parameters in StrategyCandidateGenerator.Generate(
+                         asset,
+                         timeframe,
+                         searchCandidateCount,
+                         seedScope))
+            {
+                float score = predictionEngine.Predict(parameters).PredictedRiskAdjustedScore;
+                if (best == null || score > best.PredictedScore)
+                {
+                    best = new PredictedStrategyCandidate
+                    {
+                        Asset = asset,
+                        Timeframe = timeframe,
+                        PredictedScore = score,
+                        Parameters = parameters
+                    };
+                }
+            }
+
+            return best ?? throw new InvalidOperationException("Walk-forward candidate search returned no candidates.");
         }
 
         // 2. ВИКОРИСТАННЯ МОДЕЛІ ДЛЯ ПОШУКУ НАЙКРАЩИХ ПАРАМЕТРІВ

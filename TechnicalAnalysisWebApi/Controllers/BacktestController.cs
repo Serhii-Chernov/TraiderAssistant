@@ -156,7 +156,7 @@ namespace TechnicalAnalysis.WebApi.Controllers
         /// Запускает оптимизацию: прогоняет стратегию по ВСЕМ доступным таймфреймам (1m, 5m, 1h, 4h, 1d)
         /// и возвращает результаты для сравнения.
         /// </summary>
-        [HttpGet("RunOptimization")]
+        [HttpPost("RunOptimization")]
         public async Task<IActionResult> RunOptimization(
             CurrencyPair currencyPair,
             DateTime startDate,
@@ -176,7 +176,7 @@ namespace TechnicalAnalysis.WebApi.Controllers
             }
         }
 
-        [HttpGet("RunGlobalOptimization")]
+        [HttpPost("RunGlobalOptimization")]
         public async Task<IActionResult> RunGlobalOptimization(
             [FromQuery] CurrencyPair[] pairs,
             DateTime startDate,
@@ -214,7 +214,7 @@ namespace TechnicalAnalysis.WebApi.Controllers
         internal static CurrencyPair[] NormalizePairs(IEnumerable<CurrencyPair> pairs) =>
             pairs?.Distinct().ToArray() ?? Array.Empty<CurrencyPair>();
 
-        [HttpGet("TrainModel")]
+        [HttpPost("TrainModel")]
         public async Task<IActionResult> TrainModel()
         {
             var mlService = HttpContext.RequestServices.GetRequiredService<MachineLearningService>();
@@ -242,7 +242,7 @@ namespace TechnicalAnalysis.WebApi.Controllers
             }
         }
 
-        [HttpGet("BuildValidatedStrategies")]
+        [HttpPost("BuildValidatedStrategies")]
         public async Task<IActionResult> BuildValidatedStrategies(
             DateTime startDate,
             DateTime endDate,
@@ -253,16 +253,57 @@ namespace TechnicalAnalysis.WebApi.Controllers
             if (endDate <= startDate)
                 return BadRequest("End date must be greater than start date.");
 
+            await Task.CompletedTask;
+            return StatusCode(
+                StatusCodes.Status410Gone,
+                "BuildValidatedStrategies is retired because it selects candidates on in-sample data. " +
+                "Use RunWalkForwardAnalysis and ActivateWalkForwardStrategies.");
+        }
+
+        [HttpPost("RunWalkForwardAnalysis")]
+        public async Task<IActionResult> RunWalkForwardAnalysis(
+            DateTime startDate,
+            DateTime endDate,
+            decimal initialDeposit = 1000,
+            int baseCandidatesPerStrategy = 200,
+            int searchCandidatesPerFold = 10000)
+        {
             try
             {
-                var validationService =
-                    HttpContext.RequestServices.GetRequiredService<StrategyValidationService>();
-                var result = await validationService.BuildValidatedStrategiesAsync(
+                var service = HttpContext.RequestServices.GetRequiredService<WalkForwardStrategyService>();
+                var result = await service.RunAsync(
                     startDate,
                     endDate,
                     initialDeposit,
-                    candidatesPerStrategy,
-                    searchCombinationsPerStrategy);
+                    baseCandidatesPerStrategy,
+                    searchCandidatesPerFold,
+                    activate: false);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("ActivateWalkForwardStrategies")]
+        public async Task<IActionResult> ActivateWalkForwardStrategies(
+            DateTime startDate,
+            DateTime endDate,
+            decimal initialDeposit = 1000,
+            int baseCandidatesPerStrategy = 200,
+            int searchCandidatesPerFold = 10000)
+        {
+            try
+            {
+                var service = HttpContext.RequestServices.GetRequiredService<WalkForwardStrategyService>();
+                var result = await service.RunAsync(
+                    startDate,
+                    endDate,
+                    initialDeposit,
+                    baseCandidatesPerStrategy,
+                    searchCandidatesPerFold,
+                    activate: true);
                 return Ok(result);
             }
             catch (Exception ex)

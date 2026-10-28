@@ -12,7 +12,6 @@ using TechnicalAnalysis.Shared;
 
 namespace TechnicalAnalysis.Domain
 {
-    
     public class BinanceService
     {
         private readonly BinanceRestClient _client;
@@ -51,13 +50,13 @@ namespace TechnicalAnalysis.Domain
                         var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(
                             currencyPair.ToString(), interval, start, end, limit: 1000);
 
-                        if (result.Success && result.Data.Any())
-                        {
-                            foreach (var kline in result.Data)
-                            {
-                                allKlines.Add((BinanceSpotKline)kline);
-                            }
-                        }
+                        if (!result.Success)
+                            throw new InvalidOperationException(
+                                $"Binance history request failed for {currencyPair} {interval} " +
+                                $"[{start:O}, {end:O}): {result.Error?.Message ?? "unknown error"}");
+
+                        foreach (var kline in result.Data)
+                            allKlines.Add((BinanceSpotKline)kline);
                     }
                     finally
                     {
@@ -72,18 +71,40 @@ namespace TechnicalAnalysis.Domain
 
             await Task.WhenAll(tasks);
 
-            // Сортируем и удаляем дубликаты
-            return allKlines.GroupBy(x => x.OpenTime)
-                            .Select(x => x.First())
-                            .OrderBy(x => x.OpenTime)
-                            .ToList();
+            // End time is exclusive. A candle is usable only after it has fully closed.
+            DateTime effectiveEnd = endTime < DateTime.UtcNow ? endTime : DateTime.UtcNow;
+            var ordered = allKlines
+                .Where(kline => kline.OpenTime < endTime && kline.CloseTime <= effectiveEnd)
+                .GroupBy(kline => kline.OpenTime)
+                .Select(group => group.First())
+                .OrderBy(kline => kline.OpenTime)
+                .ToList();
+
+            if (ordered.Count == 0)
+                throw new InvalidOperationException(
+                    $"Binance returned no closed candles for {currencyPair} {interval} [{startTime:O}, {endTime:O}).");
+
+            for (int index = 1; index < ordered.Count; index++)
+            {
+                DateTime expectedOpenTime = ordered[index - 1].OpenTime + intervalSpan;
+                if (ordered[index].OpenTime != expectedOpenTime)
+                {
+                    throw new InvalidOperationException(
+                        $"Historical data gap for {currencyPair} {interval}: expected {expectedOpenTime:O}, " +
+                        $"received {ordered[index].OpenTime:O}.");
+                }
+            }
+
+            return ordered;
         }
 
-        public async Task<List<KlineData>> GetChartDataAsync(CurrencyPair currencyPair, DateTime startTime, DateTime endTime)
+        public async Task<List<KlineData>> GetChartDataAsync(CurrencyPair currencyPair, DateTime startTime,
+            DateTime endTime)
         {
             var interval = GetKlineInterval(startTime, endTime);
-            
-            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime, limit: 1500);
+
+            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime,
+                endTime, limit: 1500);
             if (result.Success)
             {
                 List<KlineData> klineDataList = new List<KlineData>();
@@ -101,6 +122,7 @@ namespace TechnicalAnalysis.Domain
                     klineData.HighPrice = item.HighPrice;
                     klineDataList.Add(klineData);
                 }
+
                 return klineDataList;
             }
             else
@@ -108,6 +130,7 @@ namespace TechnicalAnalysis.Domain
                 throw new InvalidOperationException(result.Error?.Message ?? "Binance API error");
             }
         }
+
         private KlineInterval GetKlineInterval(DateTime startTime, DateTime endTime)
         {
             TimeSpan duration = endTime - startTime;
@@ -141,7 +164,8 @@ namespace TechnicalAnalysis.Domain
             return ordered[0].Interval;
         }
 
-        public async Task<IEnumerable<BinanceSpotKline>> GetChartDataForIndicatorsAsync(CurrencyPair currencyPair, DateTime endTime, KlineInterval interval = KlineInterval.OneMinute)
+        public async Task<IEnumerable<BinanceSpotKline>> GetChartDataForIndicatorsAsync(CurrencyPair currencyPair,
+            DateTime endTime, KlineInterval interval = KlineInterval.OneMinute)
         {
             // Taking into account the coefficient for the current timeframe
             int intervalMinutes = interval switch
@@ -161,7 +185,9 @@ namespace TechnicalAnalysis.Domain
             DateTime startTime = endTime.AddMinutes(-200 * intervalMinutes);
 
             // Loading data
-            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime);
+            var result =
+                await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime,
+                    endTime);
 
             if (result.Success)
             {
@@ -173,9 +199,12 @@ namespace TechnicalAnalysis.Domain
             }
         }
 
-        public async Task<IEnumerable<BinanceSpotKline>> GetChartDataForBacktestAsync(CurrencyPair currencyPair, DateTime startTime, DateTime endTime, KlineInterval interval = KlineInterval.OneMinute)
+        public async Task<IEnumerable<BinanceSpotKline>> GetChartDataForBacktestAsync(CurrencyPair currencyPair,
+            DateTime startTime, DateTime endTime, KlineInterval interval = KlineInterval.OneMinute)
         {
-            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime, endTime);
+            var result =
+                await _client.SpotApi.ExchangeData.GetKlinesAsync(currencyPair.ToString(), interval, startTime,
+                    endTime);
 
             if (result.Success)
             {
