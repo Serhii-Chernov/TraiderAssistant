@@ -266,7 +266,9 @@ namespace TechnicalAnalysis.WebApi.Controllers
             DateTime endDate,
             decimal initialDeposit = 1000,
             int baseCandidatesPerStrategy = 200,
-            int searchCandidatesPerFold = 10000)
+            int searchCandidatesPerFold = 10000,
+            string? asset = null,
+            string? timeframe = null)
         {
             try
             {
@@ -277,7 +279,9 @@ namespace TechnicalAnalysis.WebApi.Controllers
                     initialDeposit,
                     baseCandidatesPerStrategy,
                     searchCandidatesPerFold,
-                    activate: false);
+                    activate: false,
+                    assetFilter: asset,
+                    timeframeFilter: timeframe);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -292,7 +296,9 @@ namespace TechnicalAnalysis.WebApi.Controllers
             DateTime endDate,
             decimal initialDeposit = 1000,
             int baseCandidatesPerStrategy = 200,
-            int searchCandidatesPerFold = 10000)
+            int searchCandidatesPerFold = 10000,
+            string? asset = null,
+            string? timeframe = null)
         {
             try
             {
@@ -303,7 +309,9 @@ namespace TechnicalAnalysis.WebApi.Controllers
                     initialDeposit,
                     baseCandidatesPerStrategy,
                     searchCandidatesPerFold,
-                    activate: true);
+                    activate: true,
+                    assetFilter: asset,
+                    timeframeFilter: timeframe);
                 return Ok(result);
             }
             catch (Exception ex)
