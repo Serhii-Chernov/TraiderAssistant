@@ -106,6 +106,66 @@ public sealed class WalkForwardTests
     }
 
     [Fact]
+    public void TrainingTargets_ShouldNormalizeReturnAndTradesToAnnualHorizon()
+    {
+        var candidate = new OptimizationInput { Asset = "ETHUSDT", Timeframe = "FourHour" };
+        var first = Result(0, candidate, Period(2021), 10m);
+        var second = Result(0, candidate, Period(2022), 10m);
+        first.GrossProfit = second.GrossProfit = 12m;
+        first.GrossLoss = second.GrossLoss = 10m;
+
+        WalkForwardTrainingTargets targets = WalkForwardStrategyService.CalculateTrainingTargets(
+            new[] { first, second });
+
+        targets.AnnualReturn.Should().BeApproximately(10m, 0.1m);
+        targets.AnnualTrades.Should().BeApproximately(20m, 0.1m);
+        targets.MaxDrawdown.Should().Be(5m);
+        targets.ProfitFactor.Should().Be(1.2m);
+    }
+
+    [Fact]
+    public void RiskPrediction_ShouldApplyAllSafetyGates()
+    {
+        WalkForwardRiskPrediction accepted = MachineLearningService.EvaluateRiskPrediction(30f, 20f, 1.3f, 30f);
+        WalkForwardRiskPrediction rejected = MachineLearningService.EvaluateRiskPrediction(20f, 30f, 1.05f, 10f);
+
+        accepted.RiskFilterPassed.Should().BeTrue();
+        accepted.RejectionReasons.Should().BeEmpty();
+        rejected.RiskFilterPassed.Should().BeFalse();
+        rejected.RejectionReasons.Should().Contain("predicted drawdown exceeds 25%");
+        rejected.RejectionReasons.Should().Contain("predicted profit factor below 1.15");
+        rejected.RejectionReasons.Should().Contain("predicted annual trades below 15");
+        rejected.RejectionReasons.Should().Contain("predicted annual return does not exceed predicted drawdown");
+    }
+
+    [Fact]
+    public void RiskAwareModel_ShouldTrainAndScoreSearchCandidates()
+    {
+        var service = new MachineLearningService(null, null);
+        var trainingRows = StrategyCandidateGenerator.Generate("ETHUSDT", "FourHour", 100, "risk-model-test")
+            .Select((candidate, index) => candidate.CopyWithWalkForwardTargets(
+                score: index,
+                annualReturn: 30f + index / 10f,
+                maxDrawdown: 10f + index / 100f,
+                profitFactor: 1.3f,
+                annualTrades: 30f))
+            .ToList();
+
+        WalkForwardModelBundle model = service.TrainWalkForwardModel(trainingRows);
+        WalkForwardCandidatePrediction prediction = service.PredictBestWalkForwardCandidate(
+            model,
+            "ETHUSDT",
+            "FourHour",
+            100,
+            "risk-model-search-test");
+
+        prediction.Parameters.Should().NotBeNull();
+        prediction.RiskPrediction.CandidatesEvaluated.Should().Be(100);
+        prediction.RiskPrediction.PredictedAnnualReturn.Should().BeGreaterThan(0m);
+        prediction.RiskPrediction.PredictedProfitFactor.Should().NotBeNull();
+    }
+
+    [Fact]
     public void DataQuality_ShouldAllowMissingRateAtConfiguredLimit()
     {
         DateTime start = new(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc);

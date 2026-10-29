@@ -48,10 +48,41 @@ namespace TechnicalAnalysis.Domain.MLModels
         // Risk-adjusted optimization target. Raw profit is deliberately not used as the label.
         [LoadColumn(32), ColumnName("Label")] public float RiskAdjustedScore { get; set; }
 
-        public OptimizationInput CopyWithScore(float score)
+        // Walk-forward targets are normalized to a one-year horizon. They are training metadata,
+        // not strategy parameters, so they must not leak into API responses or feature columns.
+        [ColumnName("AnnualReturnLabel")]
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Newtonsoft.Json.JsonIgnore]
+        public float AnnualReturnTarget { get; set; }
+
+        [ColumnName("MaxDrawdownLabel")]
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Newtonsoft.Json.JsonIgnore]
+        public float MaxDrawdownTarget { get; set; }
+
+        [ColumnName("ProfitFactorLabel")]
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Newtonsoft.Json.JsonIgnore]
+        public float ProfitFactorTarget { get; set; }
+
+        [ColumnName("AnnualTradesLabel")]
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Newtonsoft.Json.JsonIgnore]
+        public float AnnualTradesTarget { get; set; }
+
+        public OptimizationInput CopyWithWalkForwardTargets(
+            float score,
+            float annualReturn,
+            float maxDrawdown,
+            float profitFactor,
+            float annualTrades)
         {
             var copy = (OptimizationInput)MemberwiseClone();
             copy.RiskAdjustedScore = score;
+            copy.AnnualReturnTarget = annualReturn;
+            copy.MaxDrawdownTarget = maxDrawdown;
+            copy.ProfitFactorTarget = profitFactor;
+            copy.AnnualTradesTarget = annualTrades;
             return copy;
         }
     }
