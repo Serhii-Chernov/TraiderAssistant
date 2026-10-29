@@ -14,6 +14,12 @@ public sealed class WalkForwardStrategyService
     private const decimal MinimumSharpe = 0.5m;
     private const decimal MaximumDrawdown = 25m;
     private const decimal MaximumProfitConcentration = 50m;
+    private static readonly string[] DefaultAssets = { "ETHUSDT", "SOLUSDT" };
+
+    private static readonly string[] DefaultTimeframes =
+    {
+        "OneDay", "FourHour", "OneHour", "ThirtyMinutes", "FifteenMinutes", "FiveMinutes", "OneMinute"
+    };
 
     private readonly BacktestService _backtestService;
     private readonly MachineLearningService _machineLearningService;
@@ -41,7 +47,9 @@ public sealed class WalkForwardStrategyService
         decimal initialDeposit,
         int baseCandidatesPerStrategy = 200,
         int searchCandidatesPerFold = 10000,
-        bool activate = false)
+        bool activate = false,
+        string assetFilter = null,
+        string timeframeFilter = null)
     {
         if (endDate <= startDate)
             throw new ArgumentException("End date must be greater than start date.", nameof(endDate));
@@ -59,29 +67,11 @@ public sealed class WalkForwardStrategyService
         if (periods.Count < 3)
             throw new ArgumentException("Walk-forward analysis requires at least three calendar periods.");
 
-        var storedGroups = await _dbContext.OptimizationRuns
-            .AsNoTracking()
-            .Where(run => run.Asset != null && run.Timeframe != null)
-            .Select(run => new { run.Asset, run.Timeframe })
-            .Distinct()
-            .OrderBy(group => group.Asset)
-            .ThenBy(group => group.Timeframe)
-            .ToListAsync();
-        var groups = storedGroups
-            .Select(group => (group.Asset, group.Timeframe))
-            .ToList();
-        if (groups.Count == 0)
-        {
-            string[] defaultAssets = { "ETHUSDT", "SOLUSDT" };
-            string[] defaultTimeframes =
-            {
-                "OneMinute", "FiveMinutes", "FifteenMinutes", "ThirtyMinutes",
-                "OneHour", "FourHour", "OneDay"
-            };
-            groups = defaultAssets
-                .SelectMany(asset => defaultTimeframes.Select(timeframe => (Asset: asset, Timeframe: timeframe)))
-                .ToList();
-        }
+        var groups = CreateGroups(assetFilter, timeframeFilter);
+        assetFilter = groups.Select(group => group.Asset).Distinct().Count() == 1 ? groups[0].Asset : null;
+        timeframeFilter = groups.Select(group => group.Timeframe).Distinct().Count() == 1
+            ? groups[0].Timeframe
+            : null;
 
         var report = new WalkForwardAnalysisReport
         {
@@ -91,6 +81,8 @@ public sealed class WalkForwardStrategyService
             BaseCandidatesPerStrategy = baseCandidatesPerStrategy,
             SearchCandidatesPerFold = searchCandidatesPerFold,
             CandidateSetVersion = StrategyCandidateGenerator.CandidateSetVersion,
+            AssetFilter = assetFilter,
+            TimeframeFilter = timeframeFilter,
             StrategiesActivated = activate
         };
 
@@ -108,6 +100,14 @@ public sealed class WalkForwardStrategyService
                 baseCandidatesPerStrategy,
                 searchCandidatesPerFold);
             report.Strategies.Add(result);
+            _logger.LogInformation(
+                "Walk-forward analysis completed. Asset: {Asset}, Timeframe: {Timeframe}, Accepted: {Accepted}, MlScore: {MlScore}, BaselineScore: {BaselineScore}, MlOutperformedBaseline: {MlOutperformedBaseline}",
+                result.Asset,
+                result.Timeframe,
+                result.IsAccepted,
+                result.WalkForwardScore,
+                result.Baseline.WalkForwardScore,
+                result.Baseline.MlOutperformedBaseline);
         }
 
         report.Strategies = report.Strategies
@@ -120,7 +120,28 @@ public sealed class WalkForwardStrategyService
         if (activate)
             await ActivateAsync(report);
 
+        _logger.LogInformation(
+            "Walk-forward report completed. Strategies: {StrategyCount}, Accepted: {AcceptedCount}, Activated: {ActivatedCount}",
+            report.Strategies.Count,
+            report.Strategies.Count(strategy => strategy.IsAccepted),
+            report.ActiveStrategiesCreated);
+
         return report;
+    }
+
+    internal static List<(string Asset, string Timeframe)> CreateGroups(
+        string assetFilter,
+        string timeframeFilter)
+    {
+        string canonicalAsset = CanonicalFilter(assetFilter, DefaultAssets, "asset");
+        string canonicalTimeframe = CanonicalFilter(timeframeFilter, DefaultTimeframes, "timeframe");
+
+        return DefaultAssets
+            .Where(asset => canonicalAsset == null || asset == canonicalAsset)
+            .SelectMany(asset => DefaultTimeframes
+                .Where(timeframe => canonicalTimeframe == null || timeframe == canonicalTimeframe)
+                .Select(timeframe => (Asset: asset, Timeframe: timeframe)))
+            .ToList();
     }
 
     private async Task<WalkForwardStrategyResult> AnalyzeGroupAsync(
@@ -143,7 +164,10 @@ public sealed class WalkForwardStrategyService
             periods,
             initialDeposit);
         var baseResults = baseEvaluation.Results;
-        var folds = new List<(WalkForwardFoldResult Report, CandidatePeriodBacktest Backtest)>();
+        var folds = new List<(
+            WalkForwardFoldResult Report,
+            CandidatePeriodBacktest Backtest,
+            CandidatePeriodBacktest BaselineBacktest)>();
 
         // At least two earlier calendar periods are required before an outer test.
         for (int testPeriodIndex = 2; testPeriodIndex < periods.Count; testPeriodIndex++)
@@ -151,6 +175,9 @@ public sealed class WalkForwardStrategyService
             WalkForwardPeriod testPeriod = periods[testPeriodIndex];
             var trainingPeriods = periods.Take(testPeriodIndex).ToList();
             var trainingRows = CreateTrainingRows(baseCandidates, baseResults, trainingPeriods);
+            var baselineSelection = SelectBaselineCandidate(trainingRows);
+            var baselineEvaluated = baseResults.Single(result =>
+                result.CandidateIndex == baselineSelection.CandidateIndex && result.Period == testPeriod);
 
             var model = _machineLearningService.TrainWalkForwardModel(trainingRows);
             var predicted = _machineLearningService.PredictBestWalkForwardCandidate(
@@ -180,8 +207,19 @@ public sealed class WalkForwardStrategyService
                 MaxDrawdown = Math.Round(evaluated.MaxDrawdown, 2),
                 ProfitFactor = ToNullableProfitFactor(evaluated.ProfitFactor),
                 SharpeRatio = Math.Round(evaluated.SharpeRatio, 2),
-                Parameters = predicted.Parameters
-            }, evaluated));
+                Parameters = predicted.Parameters,
+                Baseline = new WalkForwardFoldBenchmark
+                {
+                    CandidateIndex = baselineSelection.CandidateIndex,
+                    TrainingScore = Math.Round(baselineSelection.TrainingScore, 2),
+                    TotalTrades = baselineEvaluated.TotalTrades,
+                    TotalReturn = Math.Round(baselineEvaluated.TotalReturn, 2),
+                    MaxDrawdown = Math.Round(baselineEvaluated.MaxDrawdown, 2),
+                    ProfitFactor = ToNullableProfitFactor(baselineEvaluated.ProfitFactor),
+                    SharpeRatio = Math.Round(baselineEvaluated.SharpeRatio, 2),
+                    Parameters = baselineEvaluated.Parameters
+                }
+            }, evaluated, baselineEvaluated));
         }
 
         var finalRows = CreateTrainingRows(baseCandidates, baseResults, periods);
@@ -303,10 +341,26 @@ public sealed class WalkForwardStrategyService
                - concentrationPenalty;
     }
 
+    internal static (int CandidateIndex, decimal TrainingScore) SelectBaselineCandidate(
+        IReadOnlyList<OptimizationInput> trainingRows)
+    {
+        if (trainingRows.Count == 0)
+            throw new ArgumentException("At least one training row is required.", nameof(trainingRows));
+
+        return trainingRows
+            .Select((row, index) => (CandidateIndex: index, TrainingScore: (decimal)row.RiskAdjustedScore))
+            .OrderByDescending(candidate => candidate.TrainingScore)
+            .ThenBy(candidate => candidate.CandidateIndex)
+            .First();
+    }
+
     private static WalkForwardStrategyResult CreateGroupResult(
         string asset,
         string timeframe,
-        IReadOnlyCollection<(WalkForwardFoldResult Report, CandidatePeriodBacktest Backtest)> folds,
+        IReadOnlyCollection<(
+            WalkForwardFoldResult Report,
+            CandidatePeriodBacktest Backtest,
+            CandidatePeriodBacktest BaselineBacktest)> folds,
         PredictedStrategyCandidate finalCandidate,
         HistoricalDataQualityResult dataQuality)
     {
@@ -332,6 +386,20 @@ public sealed class WalkForwardStrategyService
             ? 0m
             : folds.Sum(fold => fold.Backtest.SharpeRatio * fold.Backtest.TotalTrades) / totalTrades;
         decimal score = totalReturn - MachineLearningService.DrawdownPenaltyWeight * maxDrawdown;
+        decimal baselineReturn = CompoundReturns(folds.Select(fold => fold.BaselineBacktest.TotalReturn));
+        decimal baselineMaxDrawdown = folds.Count == 0
+            ? 0m
+            : folds.Max(fold => fold.BaselineBacktest.MaxDrawdown);
+        decimal baselineGrossProfit = folds.Sum(fold => fold.BaselineBacktest.GrossProfit);
+        decimal baselineGrossLoss = folds.Sum(fold => fold.BaselineBacktest.GrossLoss);
+        decimal baselineProfitFactor = CalculateProfitFactor(baselineGrossProfit, baselineGrossLoss);
+        int baselineTrades = folds.Sum(fold => fold.BaselineBacktest.TotalTrades);
+        decimal baselineSharpe = baselineTrades == 0
+            ? 0m
+            : folds.Sum(fold => fold.BaselineBacktest.SharpeRatio * fold.BaselineBacktest.TotalTrades) /
+              baselineTrades;
+        decimal baselineScore = baselineReturn -
+                                MachineLearningService.DrawdownPenaltyWeight * baselineMaxDrawdown;
         var rejectionReasons = new List<string>();
 
         if (folds.Count < 3) rejectionReasons.Add("fewer than 3 outer walk-forward folds");
@@ -368,6 +436,18 @@ public sealed class WalkForwardStrategyService
             FinalCandidate = finalCandidate.Parameters,
             FinalPredictedScore = finalCandidate.PredictedScore,
             DataQuality = dataQuality,
+            Baseline = new WalkForwardBenchmarkSummary
+            {
+                TotalTrades = baselineTrades,
+                TotalReturn = Math.Round(baselineReturn, 2),
+                MaxDrawdown = Math.Round(baselineMaxDrawdown, 2),
+                ProfitFactor = ToNullableProfitFactor(baselineProfitFactor),
+                SharpeRatio = Math.Round(baselineSharpe, 2),
+                WalkForwardScore = Math.Round(baselineScore, 2),
+                MlReturnDelta = Math.Round(totalReturn - baselineReturn, 2),
+                MlScoreDelta = Math.Round(score - baselineScore, 2),
+                MlOutperformedBaseline = score > baselineScore
+            },
             Folds = folds.Select(fold => fold.Report).ToList()
         };
     }
@@ -391,8 +471,14 @@ public sealed class WalkForwardStrategyService
             })
             .ToList();
 
-        var existing = await _dbContext.ActiveStrategies.ToListAsync();
-        _dbContext.ActiveStrategies.RemoveRange(existing);
+        var evaluatedKeys = report.Strategies
+            .Select(strategy => (strategy.Asset, strategy.Timeframe))
+            .ToHashSet();
+        var existing = await _dbContext.ActiveStrategies
+            .Where(strategy => strategy.SelectionMethod == "WalkForward")
+            .ToListAsync();
+        _dbContext.ActiveStrategies.RemoveRange(existing.Where(strategy =>
+            evaluatedKeys.Contains((strategy.Asset, strategy.Timeframe))));
         await _dbContext.ActiveStrategies.AddRangeAsync(activeStrategies);
         await _dbContext.SaveChangesAsync();
         await _strategyProvider.LoadStrategiesFromDatabaseAsync();
@@ -467,6 +553,24 @@ public sealed class WalkForwardStrategyService
         foreach (decimal value in returns)
             multiplier *= 1m + value / 100m;
         return (multiplier - 1m) * 100m;
+    }
+
+    private static decimal CalculateProfitFactor(decimal grossProfit, decimal grossLoss)
+    {
+        if (grossLoss > 0m) return grossProfit / grossLoss;
+        return grossProfit > 0m ? decimal.MaxValue : 0m;
+    }
+
+    private static string CanonicalFilter(string value, IReadOnlyCollection<string> supported, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        string canonical = supported.FirstOrDefault(candidate =>
+            string.Equals(candidate, value, StringComparison.OrdinalIgnoreCase));
+        if (canonical == null)
+            throw new ArgumentException(
+                $"Unsupported {name} '{value}'. Supported values: {string.Join(", ", supported)}.",
+                name);
+        return canonical;
     }
 
     private static decimal? ToNullableProfitFactor(decimal value) =>

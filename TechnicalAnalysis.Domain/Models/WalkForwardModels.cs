@@ -10,6 +10,8 @@ public sealed class WalkForwardAnalysisReport
     public int BaseCandidatesPerStrategy { get; set; }
     public int SearchCandidatesPerFold { get; set; }
     public string CandidateSetVersion { get; set; }
+    public string AssetFilter { get; set; }
+    public string TimeframeFilter { get; set; }
     public bool StrategiesActivated { get; set; }
     public int ActiveStrategiesCreated { get; set; }
     public List<WalkForwardStrategyResult> Strategies { get; set; } = new();
@@ -33,7 +35,21 @@ public sealed class WalkForwardStrategyResult
     public OptimizationInput FinalCandidate { get; set; }
     public float FinalPredictedScore { get; set; }
     public HistoricalDataQualityResult DataQuality { get; set; }
+    public WalkForwardBenchmarkSummary Baseline { get; set; }
     public List<WalkForwardFoldResult> Folds { get; set; } = new();
+}
+
+public sealed class WalkForwardBenchmarkSummary
+{
+    public int TotalTrades { get; set; }
+    public decimal TotalReturn { get; set; }
+    public decimal MaxDrawdown { get; set; }
+    public decimal? ProfitFactor { get; set; }
+    public decimal SharpeRatio { get; set; }
+    public decimal WalkForwardScore { get; set; }
+    public decimal MlReturnDelta { get; set; }
+    public decimal MlScoreDelta { get; set; }
+    public bool MlOutperformedBaseline { get; set; }
 }
 
 public sealed class HistoricalDataQualityResult
@@ -70,6 +86,19 @@ public sealed class WalkForwardFoldResult
     public DateTime TestEnd { get; set; }
     public bool IsPartialPeriod { get; set; }
     public float PredictedScore { get; set; }
+    public int TotalTrades { get; set; }
+    public decimal TotalReturn { get; set; }
+    public decimal MaxDrawdown { get; set; }
+    public decimal? ProfitFactor { get; set; }
+    public decimal SharpeRatio { get; set; }
+    public OptimizationInput Parameters { get; set; }
+    public WalkForwardFoldBenchmark Baseline { get; set; }
+}
+
+public sealed class WalkForwardFoldBenchmark
+{
+    public int CandidateIndex { get; set; }
+    public decimal TrainingScore { get; set; }
     public int TotalTrades { get; set; }
     public decimal TotalReturn { get; set; }
     public decimal MaxDrawdown { get; set; }

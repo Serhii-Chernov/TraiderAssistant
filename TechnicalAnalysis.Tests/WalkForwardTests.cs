@@ -72,6 +72,40 @@ public sealed class WalkForwardTests
     }
 
     [Fact]
+    public void GroupSelection_ShouldContainAllConfiguredCombinations()
+    {
+        var groups = WalkForwardStrategyService.CreateGroups(null, null);
+
+        groups.Should().HaveCount(14);
+        groups.Should().Contain(("SOLUSDT", "OneDay"));
+    }
+
+    [Fact]
+    public void GroupSelection_ShouldApplyAssetAndTimeframeFilters()
+    {
+        var groups = WalkForwardStrategyService.CreateGroups("ethusdt", "fourhour");
+
+        groups.Should().ContainSingle()
+            .Which.Should().Be(("ETHUSDT", "FourHour"));
+    }
+
+    [Fact]
+    public void BaselineSelection_ShouldUseTrainingScoresOnly()
+    {
+        var trainingRows = new[]
+        {
+            new OptimizationInput { RiskAdjustedScore = 10f },
+            new OptimizationInput { RiskAdjustedScore = 25f },
+            new OptimizationInput { RiskAdjustedScore = -5f }
+        };
+
+        var selected = WalkForwardStrategyService.SelectBaselineCandidate(trainingRows);
+
+        selected.CandidateIndex.Should().Be(1);
+        selected.TrainingScore.Should().Be(25m);
+    }
+
+    [Fact]
     public void DataQuality_ShouldAllowMissingRateAtConfiguredLimit()
     {
         DateTime start = new(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc);
