@@ -10,6 +10,7 @@ public sealed class WalkForwardAnalysisReport
     public int BaseCandidatesPerStrategy { get; set; }
     public int SearchCandidatesPerFold { get; set; }
     public string CandidateSetVersion { get; set; }
+    public string SelectorVersion { get; set; }
     public string AssetFilter { get; set; }
     public string TimeframeFilter { get; set; }
     public bool StrategiesActivated { get; set; }
@@ -34,6 +35,7 @@ public sealed class WalkForwardStrategyResult
     public decimal WalkForwardScore { get; set; }
     public OptimizationInput FinalCandidate { get; set; }
     public float FinalPredictedScore { get; set; }
+    public WalkForwardRiskPrediction FinalPrediction { get; set; }
     public HistoricalDataQualityResult DataQuality { get; set; }
     public WalkForwardBenchmarkSummary Baseline { get; set; }
     public List<WalkForwardFoldResult> Folds { get; set; } = new();
@@ -86,6 +88,8 @@ public sealed class WalkForwardFoldResult
     public DateTime TestEnd { get; set; }
     public bool IsPartialPeriod { get; set; }
     public float PredictedScore { get; set; }
+    public WalkForwardRiskPrediction Prediction { get; set; }
+    public WalkForwardPredictionError PredictionError { get; set; }
     public int TotalTrades { get; set; }
     public decimal TotalReturn { get; set; }
     public decimal MaxDrawdown { get; set; }
@@ -107,7 +111,40 @@ public sealed class WalkForwardFoldBenchmark
     public OptimizationInput Parameters { get; set; }
 }
 
+public sealed class WalkForwardRiskPrediction
+{
+    public decimal PredictedAnnualReturn { get; set; }
+    public decimal PredictedMaxDrawdown { get; set; }
+    public decimal? PredictedProfitFactor { get; set; }
+    public decimal PredictedAnnualTrades { get; set; }
+    public decimal ConservativeScore { get; set; }
+    public bool RiskFilterPassed { get; set; }
+    public bool UsedFallback { get; set; }
+    public int CandidatesEvaluated { get; set; }
+    public int CandidatesPassedRiskFilter { get; set; }
+    public List<string> RejectionReasons { get; set; } = new();
+}
+
+public sealed class WalkForwardPredictionError
+{
+    public decimal ActualAnnualizedReturn { get; set; }
+    public decimal ActualMaxDrawdown { get; set; }
+    public decimal? ActualProfitFactor { get; set; }
+    public decimal ActualAnnualizedTrades { get; set; }
+    public decimal AnnualReturnAbsoluteError { get; set; }
+    public decimal MaxDrawdownAbsoluteError { get; set; }
+    public decimal? ProfitFactorAbsoluteError { get; set; }
+    public decimal AnnualTradesAbsoluteError { get; set; }
+}
+
 internal sealed record WalkForwardPeriod(int Year, DateTime Start, DateTime End, bool IsPartial);
+
+internal sealed record WalkForwardTrainingTargets(
+    decimal Score,
+    decimal AnnualReturn,
+    decimal MaxDrawdown,
+    decimal ProfitFactor,
+    decimal AnnualTrades);
 
 internal sealed class CandidatePeriodBacktest
 {
@@ -123,4 +160,21 @@ internal sealed class CandidatePeriodBacktest
     public decimal GrossProfit { get; set; }
     public decimal GrossLoss { get; set; }
     public HistoricalDataQualityResult DataQuality { get; set; }
+}
+
+internal sealed class WalkForwardModelBundle
+{
+    public Microsoft.ML.ITransformer AnnualReturnModel { get; init; }
+    public Microsoft.ML.ITransformer MaxDrawdownModel { get; init; }
+    public Microsoft.ML.ITransformer ProfitFactorModel { get; init; }
+    public Microsoft.ML.ITransformer AnnualTradesModel { get; init; }
+}
+
+internal sealed class WalkForwardCandidatePrediction
+{
+    public string Asset { get; init; }
+    public string Timeframe { get; init; }
+    public float PredictedScore { get; init; }
+    public OptimizationInput Parameters { get; init; }
+    public WalkForwardRiskPrediction RiskPrediction { get; init; }
 }

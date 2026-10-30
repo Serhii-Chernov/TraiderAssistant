@@ -9,6 +9,7 @@ namespace TechnicalAnalysis.Domain.Services;
 
 public sealed class WalkForwardStrategyService
 {
+    internal const string SelectorVersion = "wf-risk-v2-annualized";
     private const int MinimumOuterTrades = 60;
     private const decimal MinimumProfitFactor = 1.15m;
     private const decimal MinimumSharpe = 0.5m;
@@ -81,6 +82,7 @@ public sealed class WalkForwardStrategyService
             BaseCandidatesPerStrategy = baseCandidatesPerStrategy,
             SearchCandidatesPerFold = searchCandidatesPerFold,
             CandidateSetVersion = StrategyCandidateGenerator.CandidateSetVersion,
+            SelectorVersion = SelectorVersion,
             AssetFilter = assetFilter,
             TimeframeFilter = timeframeFilter,
             StrategiesActivated = activate
@@ -193,6 +195,18 @@ public sealed class WalkForwardStrategyService
                 new[] { testPeriod },
                 initialDeposit)).Single();
 
+            _logger.LogInformation(
+                "Walk-forward fold completed. Asset: {Asset}, Timeframe: {Timeframe}, TestYear: {TestYear}, RiskEligibleCandidates: {RiskEligibleCandidates}/{CandidatesEvaluated}, UsedFallback: {UsedFallback}, PredictedScore: {PredictedScore}, ActualReturn: {ActualReturn}, ActualDrawdown: {ActualDrawdown}",
+                asset,
+                timeframe,
+                testPeriod.Year,
+                predicted.RiskPrediction.CandidatesPassedRiskFilter,
+                predicted.RiskPrediction.CandidatesEvaluated,
+                predicted.RiskPrediction.UsedFallback,
+                predicted.PredictedScore,
+                evaluated.TotalReturn,
+                evaluated.MaxDrawdown);
+
             folds.Add((new WalkForwardFoldResult
             {
                 TestYear = testPeriod.Year,
@@ -202,6 +216,8 @@ public sealed class WalkForwardStrategyService
                 TestEnd = testPeriod.End,
                 IsPartialPeriod = testPeriod.IsPartial,
                 PredictedScore = predicted.PredictedScore,
+                Prediction = predicted.RiskPrediction,
+                PredictionError = CreatePredictionError(predicted.RiskPrediction, evaluated),
                 TotalTrades = evaluated.TotalTrades,
                 TotalReturn = Math.Round(evaluated.TotalReturn, 2),
                 MaxDrawdown = Math.Round(evaluated.MaxDrawdown, 2),
@@ -308,37 +324,62 @@ public sealed class WalkForwardStrategyService
         IReadOnlyCollection<WalkForwardPeriod> allowedPeriods)
     {
         return candidates
-            .Select((candidate, candidateIndex) => candidate.CopyWithScore(
-                (float)CalculateTrainingScore(results
+            .Select((candidate, candidateIndex) =>
+            {
+                var targets = CalculateTrainingTargets(results
                     .Where(result => result.CandidateIndex == candidateIndex &&
                                      allowedPeriods.Contains(result.Period))
-                    .ToList())))
+                    .ToList());
+                return candidate.CopyWithWalkForwardTargets(
+                    (float)targets.Score,
+                    (float)targets.AnnualReturn,
+                    (float)targets.MaxDrawdown,
+                    (float)targets.ProfitFactor,
+                    (float)targets.AnnualTrades);
+            })
             .ToList();
     }
 
-    internal static decimal CalculateTrainingScore(IReadOnlyCollection<CandidatePeriodBacktest> results)
+    internal static decimal CalculateTrainingScore(IReadOnlyCollection<CandidatePeriodBacktest> results) =>
+        CalculateTrainingTargets(results).Score;
+
+    internal static WalkForwardTrainingTargets CalculateTrainingTargets(
+        IReadOnlyCollection<CandidatePeriodBacktest> results)
     {
         if (results.Count == 0)
-            return -500m;
+            return new WalkForwardTrainingTargets(-500m, -100m, 100m, 0m, 0m);
 
         decimal compoundedReturn = CompoundReturns(results.Select(result => result.TotalReturn));
+        decimal years = CalculateYears(results.Select(result => result.Period));
+        decimal annualReturn = AnnualizeReturn(compoundedReturn, years);
         decimal maximumDrawdown = results.Max(result => result.MaxDrawdown);
         int totalTrades = results.Sum(result => result.TotalTrades);
+        decimal annualTrades = years <= 0m ? 0m : totalTrades / years;
+        decimal profitFactor = CalculateProfitFactor(
+            results.Sum(result => result.GrossProfit),
+            results.Sum(result => result.GrossLoss));
+        decimal trainingProfitFactor = profitFactor == decimal.MaxValue ? 10m : Math.Min(profitFactor, 10m);
         int positivePeriods = results.Count(result => result.TotalReturn > 0m);
         int requiredPositivePeriods = (int)Math.Ceiling(results.Count * 0.6m);
         decimal positiveProfit = results.Where(result => result.TotalReturn > 0m).Sum(result => result.TotalReturn);
         decimal bestPositiveReturn = results.Max(result => Math.Max(0m, result.TotalReturn));
         decimal concentration = positiveProfit <= 0m ? 100m : bestPositiveReturn / positiveProfit * 100m;
-        decimal tradePenalty = Math.Max(0, MachineLearningService.PreferredTrainingTrades - totalTrades) *
+        decimal tradePenalty = Math.Max(0m, MachineLearningService.PreferredTrainingTrades - annualTrades) *
                                MachineLearningService.MissingTradePenalty;
         decimal consistencyPenalty = Math.Max(0, requiredPositivePeriods - positivePeriods) * 20m;
         decimal concentrationPenalty = Math.Max(0m, concentration - MaximumProfitConcentration) * 0.5m;
 
-        return compoundedReturn
-               - MachineLearningService.DrawdownPenaltyWeight * maximumDrawdown
-               - tradePenalty
-               - consistencyPenalty
-               - concentrationPenalty;
+        decimal score = annualReturn
+                        - MachineLearningService.DrawdownPenaltyWeight * maximumDrawdown
+                        - tradePenalty
+                        - consistencyPenalty
+                        - concentrationPenalty;
+        return new WalkForwardTrainingTargets(
+            score,
+            annualReturn,
+            maximumDrawdown,
+            trainingProfitFactor,
+            annualTrades);
     }
 
     internal static (int CandidateIndex, decimal TrainingScore) SelectBaselineCandidate(
@@ -361,7 +402,7 @@ public sealed class WalkForwardStrategyService
             WalkForwardFoldResult Report,
             CandidatePeriodBacktest Backtest,
             CandidatePeriodBacktest BaselineBacktest)> folds,
-        PredictedStrategyCandidate finalCandidate,
+        WalkForwardCandidatePrediction finalCandidate,
         HistoricalDataQualityResult dataQuality)
     {
         decimal totalReturn = CompoundReturns(folds.Select(fold => fold.Backtest.TotalReturn));
@@ -417,6 +458,11 @@ public sealed class WalkForwardStrategyService
             rejectionReasons.Add("outer drawdown exceeds outer return");
         if (concentration > MaximumProfitConcentration)
             rejectionReasons.Add("more than 50% of positive outer profit comes from one fold");
+        int unsafeFoldSelections = folds.Count(fold => !fold.Report.Prediction.RiskFilterPassed);
+        if (unsafeFoldSelections > 0)
+            rejectionReasons.Add($"no risk-eligible ML candidate in {unsafeFoldSelections} outer folds");
+        if (!finalCandidate.RiskPrediction.RiskFilterPassed)
+            rejectionReasons.Add("final ML candidate failed predicted risk filter");
 
         return new WalkForwardStrategyResult
         {
@@ -435,6 +481,7 @@ public sealed class WalkForwardStrategyService
             WalkForwardScore = Math.Round(score, 2),
             FinalCandidate = finalCandidate.Parameters,
             FinalPredictedScore = finalCandidate.PredictedScore,
+            FinalPrediction = finalCandidate.RiskPrediction,
             DataQuality = dataQuality,
             Baseline = new WalkForwardBenchmarkSummary
             {
@@ -553,6 +600,56 @@ public sealed class WalkForwardStrategyService
         foreach (decimal value in returns)
             multiplier *= 1m + value / 100m;
         return (multiplier - 1m) * 100m;
+    }
+
+    internal static decimal AnnualizeReturn(decimal totalReturn, decimal years)
+    {
+        if (years <= 0m) return 0m;
+        decimal multiplier = 1m + totalReturn / 100m;
+        if (multiplier <= 0m) return -100m;
+        double annualized = Math.Pow((double)multiplier, 1d / (double)years) - 1d;
+        return (decimal)annualized * 100m;
+    }
+
+    private static decimal CalculateYears(IEnumerable<WalkForwardPeriod> periods)
+    {
+        double days = periods
+            .Distinct()
+            .Sum(period => (period.End - period.Start).TotalDays);
+        return (decimal)(days / 365.2425d);
+    }
+
+    private static WalkForwardPredictionError CreatePredictionError(
+        WalkForwardRiskPrediction prediction,
+        CandidatePeriodBacktest actual)
+    {
+        decimal years = CalculateYears(new[] { actual.Period });
+        decimal actualAnnualReturn = AnnualizeReturn(actual.TotalReturn, years);
+        decimal actualAnnualTrades = years <= 0m ? 0m : actual.TotalTrades / years;
+        decimal? actualProfitFactor = ToNullableProfitFactor(actual.ProfitFactor);
+        decimal? profitFactorError = prediction.PredictedProfitFactor.HasValue && actualProfitFactor.HasValue
+            ? Math.Abs(prediction.PredictedProfitFactor.Value - actualProfitFactor.Value)
+            : null;
+
+        return new WalkForwardPredictionError
+        {
+            ActualAnnualizedReturn = Math.Round(actualAnnualReturn, 2),
+            ActualMaxDrawdown = Math.Round(actual.MaxDrawdown, 2),
+            ActualProfitFactor = actualProfitFactor,
+            ActualAnnualizedTrades = Math.Round(actualAnnualTrades, 2),
+            AnnualReturnAbsoluteError = Math.Round(
+                Math.Abs(prediction.PredictedAnnualReturn - actualAnnualReturn),
+                2),
+            MaxDrawdownAbsoluteError = Math.Round(
+                Math.Abs(prediction.PredictedMaxDrawdown - actual.MaxDrawdown),
+                2),
+            ProfitFactorAbsoluteError = profitFactorError.HasValue
+                ? Math.Round(profitFactorError.Value, 2)
+                : null,
+            AnnualTradesAbsoluteError = Math.Round(
+                Math.Abs(prediction.PredictedAnnualTrades - actualAnnualTrades),
+                2)
+        };
     }
 
     private static decimal CalculateProfitFactor(decimal grossProfit, decimal grossLoss)
