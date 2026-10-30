@@ -9,7 +9,7 @@ namespace TechnicalAnalysis.Domain.Services;
 
 public sealed class WalkForwardStrategyService
 {
-    internal const string SelectorVersion = "wf-risk-v2-annualized";
+    internal const string SelectorVersion = "wf-risk-v3-calibrated";
     private const int MinimumOuterTrades = 60;
     private const decimal MinimumProfitFactor = 1.15m;
     private const decimal MinimumSharpe = 0.5m;
@@ -460,9 +460,10 @@ public sealed class WalkForwardStrategyService
             rejectionReasons.Add("more than 50% of positive outer profit comes from one fold");
         int unsafeFoldSelections = folds.Count(fold => !fold.Report.Prediction.RiskFilterPassed);
         if (unsafeFoldSelections > 0)
-            rejectionReasons.Add($"no risk-eligible ML candidate in {unsafeFoldSelections} outer folds");
+            rejectionReasons.Add(
+                $"no robust risk-eligible ML candidate set in {unsafeFoldSelections} outer folds");
         if (!finalCandidate.RiskPrediction.RiskFilterPassed)
-            rejectionReasons.Add("final ML candidate failed predicted risk filter");
+            rejectionReasons.Add("final ML candidate failed calibrated risk filter");
 
         return new WalkForwardStrategyResult
         {

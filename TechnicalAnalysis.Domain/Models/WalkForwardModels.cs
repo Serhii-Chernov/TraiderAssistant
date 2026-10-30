@@ -117,12 +117,45 @@ public sealed class WalkForwardRiskPrediction
     public decimal PredictedMaxDrawdown { get; set; }
     public decimal? PredictedProfitFactor { get; set; }
     public decimal PredictedAnnualTrades { get; set; }
+    public decimal AnnualReturnLowerBound { get; set; }
+    public decimal MaxDrawdownUpperBound { get; set; }
+    public decimal? ProfitFactorLowerBound { get; set; }
+    public decimal AnnualTradesLowerBound { get; set; }
     public decimal ConservativeScore { get; set; }
     public bool RiskFilterPassed { get; set; }
     public bool UsedFallback { get; set; }
     public int CandidatesEvaluated { get; set; }
     public int CandidatesPassedRiskFilter { get; set; }
+    public int RequiredRiskEligibleCandidates { get; set; }
+    public decimal RiskEligiblePercent { get; set; }
+    public WalkForwardPredictionCalibration Calibration { get; set; }
+    public WalkForwardSearchDiagnostics SearchDiagnostics { get; set; }
     public List<string> RejectionReasons { get; set; } = new();
+}
+
+public sealed class WalkForwardPredictionCalibration
+{
+    public decimal AnnualReturnMae { get; set; }
+    public decimal MaxDrawdownMae { get; set; }
+    public decimal ProfitFactorMae { get; set; }
+    public decimal AnnualTradesMae { get; set; }
+}
+
+public sealed class WalkForwardSearchDiagnostics
+{
+    public WalkForwardMetricDistribution RawAnnualReturn { get; set; }
+    public WalkForwardMetricDistribution RawMaxDrawdown { get; set; }
+    public WalkForwardMetricDistribution RawProfitFactor { get; set; }
+    public WalkForwardMetricDistribution RawAnnualTrades { get; set; }
+    public int NegativeAnnualTradesPredictions { get; set; }
+    public int NonFinitePredictions { get; set; }
+}
+
+public sealed class WalkForwardMetricDistribution
+{
+    public decimal Minimum { get; set; }
+    public decimal Median { get; set; }
+    public decimal Maximum { get; set; }
 }
 
 public sealed class WalkForwardPredictionError
@@ -168,6 +201,7 @@ internal sealed class WalkForwardModelBundle
     public Microsoft.ML.ITransformer MaxDrawdownModel { get; init; }
     public Microsoft.ML.ITransformer ProfitFactorModel { get; init; }
     public Microsoft.ML.ITransformer AnnualTradesModel { get; init; }
+    public WalkForwardPredictionCalibration Calibration { get; init; }
 }
 
 internal sealed class WalkForwardCandidatePrediction

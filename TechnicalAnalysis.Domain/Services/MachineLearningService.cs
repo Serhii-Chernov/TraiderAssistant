@@ -28,6 +28,9 @@ namespace TechnicalAnalysis.Domain.Services
         internal const decimal MinimumPredictedProfitFactor = 1.15m;
         internal const decimal MaximumPredictedDrawdown = 25m;
         internal const decimal MinimumPredictedAnnualTrades = 15m;
+        internal const int MinimumRiskEligibleCandidates = 5;
+        internal const decimal MinimumRiskEligibleFraction = 0.01m;
+        private const int CalibrationFoldCount = 5;
 
         internal static readonly string[] FeatureColumnNames =
         {
@@ -137,28 +140,56 @@ namespace TechnicalAnalysis.Domain.Services
                     nameof(trainingRows));
 
             IDataView dataView = _mlContext.Data.LoadFromEnumerable(trainingRows);
+            var annualReturn = TrainWalkForwardMetric(dataView, "AnnualReturnLabel");
+            var maxDrawdown = TrainWalkForwardMetric(dataView, "MaxDrawdownLabel");
+            var profitFactor = TrainWalkForwardMetric(dataView, "ProfitFactorLabel");
+            var annualTrades = TrainWalkForwardMetric(dataView, "AnnualTradesLabel", useCountModel: true);
             return new WalkForwardModelBundle
             {
-                AnnualReturnModel = TrainWalkForwardMetric(dataView, "AnnualReturnLabel"),
-                MaxDrawdownModel = TrainWalkForwardMetric(dataView, "MaxDrawdownLabel"),
-                ProfitFactorModel = TrainWalkForwardMetric(dataView, "ProfitFactorLabel"),
-                AnnualTradesModel = TrainWalkForwardMetric(dataView, "AnnualTradesLabel")
+                AnnualReturnModel = annualReturn.Model,
+                MaxDrawdownModel = maxDrawdown.Model,
+                ProfitFactorModel = profitFactor.Model,
+                AnnualTradesModel = annualTrades.Model,
+                Calibration = new WalkForwardPredictionCalibration
+                {
+                    AnnualReturnMae = annualReturn.Mae,
+                    MaxDrawdownMae = maxDrawdown.Mae,
+                    ProfitFactorMae = profitFactor.Mae,
+                    AnnualTradesMae = annualTrades.Mae
+                }
             };
         }
 
-        private ITransformer TrainWalkForwardMetric(IDataView dataView, string labelColumnName)
+        private (ITransformer Model, decimal Mae) TrainWalkForwardMetric(
+            IDataView dataView,
+            string labelColumnName,
+            bool useCountModel = false)
         {
-            var pipeline = _mlContext.Transforms
+            IEstimator<ITransformer> dataPipeline = _mlContext.Transforms
                 .Categorical.OneHotEncoding("TimeframeEncoded", nameof(OptimizationInput.Timeframe))
                 .Append(_mlContext.Transforms.Categorical.OneHotEncoding(
                     "AssetEncoded",
                     nameof(OptimizationInput.Asset)))
-                .Append(_mlContext.Transforms.Concatenate("Features", FeatureColumnNames))
-                .Append(_mlContext.Regression.Trainers.FastTree(
+                .Append(_mlContext.Transforms.Concatenate("Features", FeatureColumnNames));
+            IEstimator<ITransformer> pipeline = useCountModel
+                ? dataPipeline.Append(_mlContext.Regression.Trainers.FastTreeTweedie(
+                    labelColumnName: labelColumnName,
+                    featureColumnName: "Features"))
+                : dataPipeline.Append(_mlContext.Regression.Trainers.FastTree(
                     labelColumnName: labelColumnName,
                     featureColumnName: "Features"));
 
-            return pipeline.Fit(dataView);
+            var crossValidation = _mlContext.Regression.CrossValidate(
+                dataView,
+                pipeline,
+                numberOfFolds: CalibrationFoldCount,
+                labelColumnName: labelColumnName);
+            double meanAbsoluteError = crossValidation.Average(result => result.Metrics.MeanAbsoluteError);
+            decimal mae = double.IsFinite(meanAbsoluteError)
+                ? Math.Max(0m, (decimal)meanAbsoluteError)
+                : 0m;
+
+            return (pipeline.Fit(dataView), Math.Round(mae, 4));
         }
 
         internal WalkForwardCandidatePrediction PredictBestWalkForwardCandidate(
@@ -183,6 +214,11 @@ namespace TechnicalAnalysis.Domain.Services
             WalkForwardCandidatePrediction bestFallback = null;
             int candidatesEvaluated = 0;
             int candidatesPassedRiskFilter = 0;
+            int nonFinitePredictions = 0;
+            var rawReturns = new List<decimal>(searchCandidateCount);
+            var rawDrawdowns = new List<decimal>(searchCandidateCount);
+            var rawProfitFactors = new List<decimal>(searchCandidateCount);
+            var rawTrades = new List<decimal>(searchCandidateCount);
 
             foreach (var parameters in StrategyCandidateGenerator.Generate(
                          asset,
@@ -191,11 +227,21 @@ namespace TechnicalAnalysis.Domain.Services
                          seedScope))
             {
                 candidatesEvaluated++;
+                float rawReturn = returnEngine.Predict(parameters).PredictedRiskAdjustedScore;
+                float rawDrawdown = drawdownEngine.Predict(parameters).PredictedRiskAdjustedScore;
+                float rawProfitFactor = profitFactorEngine.Predict(parameters).PredictedRiskAdjustedScore;
+                float rawAnnualTrades = tradesEngine.Predict(parameters).PredictedRiskAdjustedScore;
+                nonFinitePredictions += CountNonFinite(rawReturn, rawDrawdown, rawProfitFactor, rawAnnualTrades);
+                rawReturns.Add(ToFiniteDecimal(rawReturn, -100m));
+                rawDrawdowns.Add(ToFiniteDecimal(rawDrawdown, 100m));
+                rawProfitFactors.Add(ToFiniteDecimal(rawProfitFactor, 0m));
+                rawTrades.Add(ToFiniteDecimal(rawAnnualTrades, 0m));
                 var riskPrediction = EvaluateRiskPrediction(
-                    returnEngine.Predict(parameters).PredictedRiskAdjustedScore,
-                    drawdownEngine.Predict(parameters).PredictedRiskAdjustedScore,
-                    profitFactorEngine.Predict(parameters).PredictedRiskAdjustedScore,
-                    tradesEngine.Predict(parameters).PredictedRiskAdjustedScore);
+                    rawReturn,
+                    rawDrawdown,
+                    rawProfitFactor,
+                    rawAnnualTrades,
+                    model.Calibration);
                 var candidate = new WalkForwardCandidatePrediction
                 {
                     Asset = asset,
@@ -216,11 +262,32 @@ namespace TechnicalAnalysis.Domain.Services
                 }
             }
 
-            var best = bestEligible ?? bestFallback ??
+            int requiredRiskEligibleCandidates = RequiredRiskEligibleCandidates(candidatesEvaluated);
+            bool hasRobustEligibleSet = candidatesPassedRiskFilter >= requiredRiskEligibleCandidates;
+            var best = (hasRobustEligibleSet ? bestEligible : bestEligible ?? bestFallback) ??
                 throw new InvalidOperationException("Walk-forward candidate search returned no candidates.");
             best.RiskPrediction.CandidatesEvaluated = candidatesEvaluated;
             best.RiskPrediction.CandidatesPassedRiskFilter = candidatesPassedRiskFilter;
-            best.RiskPrediction.UsedFallback = bestEligible == null;
+            best.RiskPrediction.RequiredRiskEligibleCandidates = requiredRiskEligibleCandidates;
+            best.RiskPrediction.RiskEligiblePercent = Math.Round(
+                candidatesPassedRiskFilter * 100m / candidatesEvaluated,
+                2);
+            best.RiskPrediction.UsedFallback = !hasRobustEligibleSet;
+            best.RiskPrediction.SearchDiagnostics = new WalkForwardSearchDiagnostics
+            {
+                RawAnnualReturn = CreateDistribution(rawReturns),
+                RawMaxDrawdown = CreateDistribution(rawDrawdowns),
+                RawProfitFactor = CreateDistribution(rawProfitFactors),
+                RawAnnualTrades = CreateDistribution(rawTrades),
+                NegativeAnnualTradesPredictions = rawTrades.Count(value => value < 0m),
+                NonFinitePredictions = nonFinitePredictions
+            };
+            if (!hasRobustEligibleSet)
+            {
+                best.RiskPrediction.RiskFilterPassed = false;
+                best.RiskPrediction.RejectionReasons.Add(
+                    $"risk-eligible candidate population below {requiredRiskEligibleCandidates}");
+            }
             return best;
         }
 
@@ -228,32 +295,40 @@ namespace TechnicalAnalysis.Domain.Services
             float annualReturn,
             float maxDrawdown,
             float profitFactor,
-            float annualTrades)
+            float annualTrades,
+            WalkForwardPredictionCalibration calibration = null)
         {
+            calibration ??= new WalkForwardPredictionCalibration();
             decimal predictedReturn = ToFiniteDecimal(annualReturn, -100m);
             decimal predictedDrawdown = Math.Max(0m, ToFiniteDecimal(maxDrawdown, 100m));
             decimal predictedProfitFactor = Math.Max(0m, ToFiniteDecimal(profitFactor, 0m));
             decimal predictedTrades = Math.Max(0m, ToFiniteDecimal(annualTrades, 0m));
+            decimal returnLowerBound = predictedReturn - Math.Max(0m, calibration.AnnualReturnMae);
+            decimal drawdownUpperBound = predictedDrawdown + Math.Max(0m, calibration.MaxDrawdownMae);
+            decimal profitFactorLowerBound = Math.Max(
+                0m,
+                predictedProfitFactor - Math.Max(0m, calibration.ProfitFactorMae));
+            decimal tradesLowerBound = Math.Max(0m, predictedTrades - Math.Max(0m, calibration.AnnualTradesMae));
             var reasons = new List<string>();
 
-            if (predictedReturn <= 0m)
+            if (returnLowerBound <= 0m)
                 reasons.Add("predicted annual return is non-positive");
-            if (predictedDrawdown > MaximumPredictedDrawdown)
+            if (drawdownUpperBound > MaximumPredictedDrawdown)
                 reasons.Add(string.Create(CultureInfo.InvariantCulture,
                     $"predicted drawdown exceeds {MaximumPredictedDrawdown:0.##}%"));
-            if (predictedProfitFactor < MinimumPredictedProfitFactor)
+            if (profitFactorLowerBound < MinimumPredictedProfitFactor)
                 reasons.Add(string.Create(CultureInfo.InvariantCulture,
                     $"predicted profit factor below {MinimumPredictedProfitFactor:0.##}"));
-            if (predictedTrades < MinimumPredictedAnnualTrades)
+            if (tradesLowerBound < MinimumPredictedAnnualTrades)
                 reasons.Add(string.Create(CultureInfo.InvariantCulture,
                     $"predicted annual trades below {MinimumPredictedAnnualTrades:0.##}"));
-            if (predictedReturn <= predictedDrawdown)
+            if (returnLowerBound <= drawdownUpperBound)
                 reasons.Add("predicted annual return does not exceed predicted drawdown");
 
-            decimal cappedProfitFactor = Math.Min(predictedProfitFactor, 3m);
-            decimal missingTrades = Math.Max(0m, PreferredTrainingTrades - predictedTrades);
-            decimal score = predictedReturn
-                            - DrawdownPenaltyWeight * predictedDrawdown
+            decimal cappedProfitFactor = Math.Min(profitFactorLowerBound, 3m);
+            decimal missingTrades = Math.Max(0m, PreferredTrainingTrades - tradesLowerBound);
+            decimal score = returnLowerBound
+                            - DrawdownPenaltyWeight * drawdownUpperBound
                             + 10m * (cappedProfitFactor - MinimumPredictedProfitFactor)
                             - MissingTradePenalty * missingTrades;
 
@@ -263,11 +338,39 @@ namespace TechnicalAnalysis.Domain.Services
                 PredictedMaxDrawdown = Math.Round(predictedDrawdown, 2),
                 PredictedProfitFactor = Math.Round(predictedProfitFactor, 2),
                 PredictedAnnualTrades = Math.Round(predictedTrades, 2),
+                AnnualReturnLowerBound = Math.Round(returnLowerBound, 2),
+                MaxDrawdownUpperBound = Math.Round(drawdownUpperBound, 2),
+                ProfitFactorLowerBound = Math.Round(profitFactorLowerBound, 2),
+                AnnualTradesLowerBound = Math.Round(tradesLowerBound, 2),
                 ConservativeScore = Math.Round(score, 2),
                 RiskFilterPassed = reasons.Count == 0,
+                Calibration = calibration,
                 RejectionReasons = reasons
             };
         }
+
+        internal static int RequiredRiskEligibleCandidates(int candidatesEvaluated) => Math.Max(
+            MinimumRiskEligibleCandidates,
+            (int)Math.Ceiling(candidatesEvaluated * MinimumRiskEligibleFraction));
+
+        internal static WalkForwardMetricDistribution CreateDistribution(IEnumerable<decimal> values)
+        {
+            decimal[] ordered = values.OrderBy(value => value).ToArray();
+            if (ordered.Length == 0)
+                return new WalkForwardMetricDistribution();
+
+            decimal median = ordered.Length % 2 == 1
+                ? ordered[ordered.Length / 2]
+                : (ordered[ordered.Length / 2 - 1] + ordered[ordered.Length / 2]) / 2m;
+            return new WalkForwardMetricDistribution
+            {
+                Minimum = Math.Round(ordered[0], 2),
+                Median = Math.Round(median, 2),
+                Maximum = Math.Round(ordered[^1], 2)
+            };
+        }
+
+        private static int CountNonFinite(params float[] values) => values.Count(value => !float.IsFinite(value));
 
         private static decimal ToFiniteDecimal(float value, decimal fallback) =>
             float.IsFinite(value) ? (decimal)value : fallback;
