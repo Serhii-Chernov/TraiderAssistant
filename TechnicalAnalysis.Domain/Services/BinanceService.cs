@@ -292,6 +292,38 @@ namespace TechnicalAnalysis.Domain
             }
         }
 
+        public async Task<List<BinanceSpotKline>> GetRecentClosedKlinesAsync(
+            CurrencyPair currencyPair,
+            KlineInterval interval,
+            int count = 200)
+        {
+            if (count < 60 || count > 998)
+                throw new ArgumentOutOfRangeException(nameof(count), "Candle count must be between 60 and 998.");
+
+            var result = await _client.SpotApi.ExchangeData.GetKlinesAsync(
+                currencyPair.ToString(),
+                interval,
+                limit: count + 2);
+            if (!result.Success)
+                throw new InvalidOperationException(result.Error?.Message ?? "Binance API error");
+
+            DateTime now = DateTime.UtcNow;
+            var candles = result.Data
+                .Cast<BinanceSpotKline>()
+                .Where(candle => candle.CloseTime <= now)
+                .OrderBy(candle => candle.OpenTime)
+                .TakeLast(count)
+                .ToList();
+            if (candles.Count < count)
+            {
+                throw new InvalidOperationException(
+                    $"Binance returned only {candles.Count} closed candles for {currencyPair} {interval}; " +
+                    $"{count} are required.");
+            }
+
+            return candles;
+        }
+
         public async Task<IEnumerable<BinanceSpotKline>> GetChartDataForBacktestAsync(CurrencyPair currencyPair,
             DateTime startTime, DateTime endTime, KlineInterval interval = KlineInterval.OneMinute)
         {

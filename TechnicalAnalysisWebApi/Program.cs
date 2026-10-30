@@ -24,6 +24,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton<StrategyProviderService>();
 builder.Services.AddSingleton<TechnicalAnalysisService>();
 builder.Services.AddSingleton<BinanceService>();
+builder.Services.AddSingleton<TournamentSignalService>();
 builder.Services.AddScoped<BacktestService>();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<MachineLearningService>();
