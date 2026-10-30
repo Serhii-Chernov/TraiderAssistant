@@ -139,6 +139,54 @@ public sealed class WalkForwardTests
     }
 
     [Fact]
+    public void RiskPrediction_ShouldApplyCalibrationErrorToConservativeBounds()
+    {
+        var calibration = new WalkForwardPredictionCalibration
+        {
+            AnnualReturnMae = 5m,
+            MaxDrawdownMae = 3m,
+            ProfitFactorMae = 0.1m,
+            AnnualTradesMae = 4m
+        };
+
+        WalkForwardRiskPrediction prediction = MachineLearningService.EvaluateRiskPrediction(
+            30f,
+            20f,
+            1.3f,
+            30f,
+            calibration);
+
+        prediction.AnnualReturnLowerBound.Should().Be(25m);
+        prediction.MaxDrawdownUpperBound.Should().Be(23m);
+        prediction.ProfitFactorLowerBound.Should().Be(1.2m);
+        prediction.AnnualTradesLowerBound.Should().Be(26m);
+        prediction.RiskFilterPassed.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(100, 5)]
+    [InlineData(1000, 10)]
+    [InlineData(10000, 100)]
+    public void RiskEligiblePopulation_ShouldRequireAtLeastOnePercent(
+        int candidatesEvaluated,
+        int expectedMinimum)
+    {
+        MachineLearningService.RequiredRiskEligibleCandidates(candidatesEvaluated)
+            .Should().Be(expectedMinimum);
+    }
+
+    [Fact]
+    public void PredictionDistribution_ShouldReportMedianAndExtremes()
+    {
+        WalkForwardMetricDistribution distribution = MachineLearningService.CreateDistribution(
+            new[] { 10m, -5m, 3m, 7m });
+
+        distribution.Minimum.Should().Be(-5m);
+        distribution.Median.Should().Be(5m);
+        distribution.Maximum.Should().Be(10m);
+    }
+
+    [Fact]
     public void RiskAwareModel_ShouldTrainAndScoreSearchCandidates()
     {
         var service = new MachineLearningService(null, null);
@@ -163,6 +211,13 @@ public sealed class WalkForwardTests
         prediction.RiskPrediction.CandidatesEvaluated.Should().Be(100);
         prediction.RiskPrediction.PredictedAnnualReturn.Should().BeGreaterThan(0m);
         prediction.RiskPrediction.PredictedProfitFactor.Should().NotBeNull();
+        prediction.RiskPrediction.Calibration.Should().NotBeNull();
+        prediction.RiskPrediction.SearchDiagnostics.Should().NotBeNull();
+        prediction.RiskPrediction.SearchDiagnostics.RawAnnualTrades.Minimum.Should().BeGreaterThanOrEqualTo(0m);
+        prediction.RiskPrediction.SearchDiagnostics.NegativeAnnualTradesPredictions.Should().Be(0);
+        prediction.RiskPrediction.RequiredRiskEligibleCandidates.Should().Be(5);
+        prediction.RiskPrediction.RiskFilterPassed.Should().BeTrue();
+        prediction.RiskPrediction.UsedFallback.Should().BeFalse();
     }
 
     [Fact]
